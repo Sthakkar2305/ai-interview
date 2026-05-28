@@ -23,6 +23,8 @@ import {
   Target
 } from "lucide-react"
 
+import logo from "../public/icon.png"
+
 export default function Home() {
   const router = useRouter()
   const { user, loading, signOut } = useAuth()
@@ -48,9 +50,7 @@ export default function Home() {
         <nav className="border-b border-border/40 sticky top-0 bg-slate-50/75 dark:bg-[#0c0f1d]/75 backdrop-blur-md z-50">
           <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-500/25">
-                <Sparkles className="h-6 w-6" />
-              </div>
+              <img src={logo.src} alt="Logo" className="h-18 w-18 rounded-lg" /> 
               <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text">
                 AI Interview <span className="text-violet-600 dark:text-violet-400">Platform</span>
               </span>
