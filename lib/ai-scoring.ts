@@ -146,19 +146,16 @@ export async function evaluateAnswer(
 
     const completion = await openai.chat.completions.create({
       model: DEEPSEEK_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 1,
+      messages: [
+        { role: "system", content: "You must return your evaluation strictly as a single, valid JSON object. No preamble, no explanation, no conversational text, and no markdown wrapping (do not wrap in ```json)." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
       top_p: 0.95,
-      max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
-      stream: true,
-    } as any)
+      max_tokens: 4096,
+    })
 
-    let text = ""
-    for await (const chunk of (completion as any)) {
-      const content = chunk.choices[0]?.delta?.content || ""
-      if (content) text += content
-    }
+    const text = completion.choices[0]?.message?.content || ""
 
     const evaluation = parseJsonObject<AnswerEvaluation>(text)
     const contentScore = clampScore(evaluation.contentScore)
@@ -260,19 +257,16 @@ export async function evaluateSession(
 
     const completion = await openai.chat.completions.create({
       model: DEEPSEEK_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 1,
+      messages: [
+        { role: "system", content: "You must return your evaluation strictly as a single, valid JSON object matching the required fields. No preamble, no explanation, no conversational text, and no markdown wrapping (do not wrap in ```json)." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2,
       top_p: 0.95,
       max_tokens: 8192,
-      chat_template_kwargs: { thinking: true },
-      stream: true,
-    } as any)
+    })
 
-    let text = ""
-    for await (const chunk of (completion as any)) {
-      const content = chunk.choices[0]?.delta?.content || ""
-      if (content) text += content
-    }
+    const text = completion.choices[0]?.message?.content || ""
 
     const evaluation = parseJsonObject<SessionEvaluation>(text)
     const vocabularyUpgrades =

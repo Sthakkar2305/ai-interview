@@ -102,6 +102,9 @@ export default function InterviewSessionPage() {
   const [countdownToQuestion, setCountdownToQuestion] = useState(0)
   const [error, setError] = useState("")
   const [isTerminated, setIsTerminated] = useState(false)
+  const [isExpired, setIsExpired] = useState(false)
+  const [expiryReason, setExpiryReason] = useState("")
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true)
 
   const speakText = (text: string) => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -152,12 +155,124 @@ export default function InterviewSessionPage() {
       return
     }
 
-    const configStr = sessionStorage.getItem(`interview_config_${sessionId}`)
-    if (configStr) {
-      setConfig(normalizeConfig(JSON.parse(configStr)))
-    } else {
-      setError("Configuration missing. Please go back to the dashboard.")
+    const checkSessionAndLoadConfig = async () => {
+      setIsCheckingStatus(true)
+      try {
+        // 1. Fetch the interview session and its base interview from Supabase
+        const { data: sessionData, error: sessionErr } = await supabase
+          .from("interview_sessions")
+          .select(`
+            *,
+            interviews (
+              id,
+              title,
+              interview_type,
+              manual_qa
+            )
+          `)
+          .eq("id", sessionId)
+          .single()
+
+        if (sessionErr || !sessionData) {
+          setError("Interview session not found. Please return to the dashboard.")
+          setIsCheckingStatus(false)
+          return
+        }
+
+        // 2. Check if the session status is terminated or completed
+        if (sessionData.status === "completed" || sessionData.session_status === "completed") {
+          setIsExpired(true)
+          setExpiryReason("completed")
+          setIsCheckingStatus(false)
+          return
+        }
+
+        if (sessionData.session_status === "terminated") {
+          setIsExpired(true)
+          setExpiryReason("terminated")
+          setIsCheckingStatus(false)
+          return
+        }
+
+        // 3. Look up the scheduled interview by title to see if it has expired
+        const { data: scheduledData } = await supabase
+          .from("scheduled_interviews")
+          .select("*")
+          .eq("title", sessionData.interviews.title)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const now = new Date()
+        if (scheduledData) {
+          const expiredAt = new Date(scheduledData.expires_at)
+          const scheduledAtDate = new Date(scheduledData.scheduled_at)
+          
+          // Check if now is past the expiry time
+          if (expiredAt < now || scheduledData.status === "expired") {
+            setIsExpired(true)
+            setExpiryReason("expired")
+            setIsCheckingStatus(false)
+            return
+          }
+
+          // Check if now is way past the scheduled start time (e.g. missed the interview start window by 24 hours or duration)
+          const startWindowExpiry = new Date(scheduledAtDate.getTime() + (scheduledData.duration_minutes + 60) * 60 * 1000)
+          if (now > startWindowExpiry) {
+            setIsExpired(true)
+            setExpiryReason("missed")
+            setIsCheckingStatus(false)
+            return
+          }
+        }
+
+        // 4. Load or reconstruct config
+        const configStr = sessionStorage.getItem(`interview_config_${sessionId}`)
+        if (configStr) {
+          setConfig(normalizeConfig(JSON.parse(configStr)))
+        } else {
+          // Reconstruct config from database
+          const isManual = sessionData.interviews.interview_type === "manual"
+          const manualQa = Array.isArray(sessionData.interviews.manual_qa) ? sessionData.interviews.manual_qa : []
+
+          let docContent = ""
+          let docTopics: string[] = []
+          let docKeyConcepts: Record<string, string[]> = {}
+
+          if (!isManual) {
+            const { data: docData } = await supabase
+              .from("document_uploads")
+              .select("*")
+              .eq("interview_id", interviewId)
+              .maybeSingle()
+
+            if (docData) {
+              docContent = docData.extracted_content || ""
+              docTopics = docData.topics || []
+              docKeyConcepts = docData.key_concepts || {}
+            }
+          }
+
+          setConfig({
+            mode: isManual ? "manual" : "document",
+            duration: scheduledData?.duration_minutes || 30,
+            questionCount: isManual ? manualQa.length : 5,
+            difficulty: (scheduledData?.difficulty as any) || "medium",
+            documentContent: docContent,
+            topics: docTopics,
+            keyConcepts: docKeyConcepts,
+            manualQa: manualQa as any
+          })
+        }
+      } catch (err: any) {
+        console.error("Error loading session:", err)
+        setError("An error occurred while loading your session. Please try again.")
+      } finally {
+        setIsCheckingStatus(false)
+      }
     }
+
+    checkSessionAndLoadConfig()
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.getVoices()
@@ -165,7 +280,7 @@ export default function InterviewSessionPage() {
         window.speechSynthesis.getVoices()
       }
     }
-  }, [user, authLoading, sessionId, router])
+  }, [user, authLoading, sessionId, interviewId, router, supabase])
 
   useEffect(() => {
     const initMedia = async () => {
@@ -402,10 +517,96 @@ export default function InterviewSessionPage() {
     }
   }
 
-  if (authLoading || !config) {
+  if (authLoading || isCheckingStatus) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground animate-pulse font-medium">Verifying session status...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isExpired) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-lg border-red-500/20 shadow-xl dark:shadow-red-950/10 overflow-hidden bg-white dark:bg-card">
+          <div className="h-2 bg-gradient-to-r from-red-500 via-orange-500 to-red-600" />
+          <CardContent className="pt-8 pb-8 px-6 text-center space-y-6">
+            <div className="mx-auto w-16 h-16 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-2 shadow-inner animate-bounce">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                {expiryReason === "completed" 
+                  ? "Interview Already Completed" 
+                  : expiryReason === "terminated"
+                  ? "Interview Session Terminated"
+                  : "Scheduled Interview Window Closed"}
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                {expiryReason === "completed"
+                  ? "This interview session has already been completed and submitted for evaluation. You can view your results on the dashboard."
+                  : expiryReason === "terminated"
+                  ? "This session was terminated due to policy/proctoring violations. Please contact the recruiter for further details."
+                  : "You missed the scheduled interview. Please contact our support team for more info. For now, you will not be able to join any interview."}
+              </p>
+            </div>
+
+            <div className="bg-red-50/50 dark:bg-red-950/10 border border-red-100 dark:border-red-950/30 p-4 rounded-xl text-left max-w-md mx-auto">
+              <h4 className="text-xs font-bold uppercase text-red-800 dark:text-red-400 mb-1 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5" /> Support Information
+              </h4>
+              <p className="text-xs text-red-700/80 dark:text-red-300/80 leading-normal">
+                Please contact our support team at <span className="font-semibold underline">support@ai-interview.com</span> or reach out to your recruiter to request a rescheduling of your interview slot.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <Button onClick={() => router.push("/dashboard")} variant="outline" className="w-full sm:w-auto h-11 px-6">
+                Return to Dashboard
+              </Button>
+              <Button 
+                onClick={() => window.location.href = "mailto:support@ai-interview.com?subject=Rescheduling Request for Interview"} 
+                className="w-full sm:w-auto h-11 px-6 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Contact Support
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error && !config) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-destructive/50 bg-white dark:bg-card">
+          <CardContent className="pt-8 pb-8 px-6 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-2">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold">Session Error</h3>
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button className="w-full h-11" onClick={() => router.push("/dashboard")}>
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!config) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading interview configuration...</p>
+        </div>
       </div>
     )
   }
