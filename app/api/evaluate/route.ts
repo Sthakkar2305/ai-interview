@@ -80,6 +80,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to queue evaluation" }, { status: 500 })
     }
 
+    // Attempt to trigger the worker immediately (fire-and-forget)
+    // so the user doesn't have to wait for the next cron interval
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+      // We purposefully don't await this so it runs asynchronously
+      fetch(`${baseUrl}/api/worker`, { method: "POST" }).catch(e => console.error("Worker trigger failed:", e));
+    } catch (e) {
+      console.error("Failed to construct worker URL:", e);
+    }
+
     return NextResponse.json({ success: true, status: "pending" }, { status: 202 })
 
   } catch (error) {
