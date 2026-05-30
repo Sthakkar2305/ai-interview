@@ -14,7 +14,9 @@ import {
   AlertCircle, 
   Calendar, 
   ArrowRight,
-  BarChart3
+  BarChart3,
+  CheckCircle2,
+  XCircle
 } from "lucide-react"
 
 // Types for our data
@@ -42,7 +44,10 @@ export default function DashboardPage() {
   const [stats, setStats] = useState({
     totalInterviews: 0,
     avgScore: 0,
-    topScore: 0
+    topScore: 0,
+    passedCount: 0,
+    failedCount: 0,
+    passPercentage: 0
   })
 
   // 1. Auth Check & Data Fetching
@@ -69,7 +74,8 @@ export default function DashboardPage() {
             interview_id,
             interviews (
               title,
-              interview_type
+              interview_type,
+              passing_marks
             )
           `)
           .eq("user_id", user.id)
@@ -83,13 +89,27 @@ export default function DashboardPage() {
           setSessions(formattedData)
 
           // Calculate Stats
-          const completedSessions = formattedData.filter(s => s.status === 'completed' && s.overall_score)
+          const completedSessions = formattedData.filter(s => s.status === 'completed' && s.overall_score !== null)
           const totalScore = completedSessions.reduce((acc, curr) => acc + (curr.overall_score || 0), 0)
+          
+          let passedCount = 0
+          let failedCount = 0
+          completedSessions.forEach(s => {
+            const passingMarks = (s as any).interviews?.passing_marks || 70
+            if ((s.overall_score || 0) >= passingMarks) {
+              passedCount++
+            } else {
+              failedCount++
+            }
+          })
           
           setStats({
             totalInterviews: formattedData.length,
             avgScore: completedSessions.length ? Math.round(totalScore / completedSessions.length) : 0,
-            topScore: completedSessions.length ? Math.max(...completedSessions.map(s => s.overall_score || 0)) : 0
+            topScore: completedSessions.length ? Math.max(...completedSessions.map(s => s.overall_score || 0)) : 0,
+            passedCount,
+            failedCount,
+            passPercentage: completedSessions.length ? Math.round((passedCount / completedSessions.length) * 100) : 0
           })
         }
       } catch (err) {
@@ -113,7 +133,7 @@ export default function DashboardPage() {
         .from("interview_sessions")
         .select(`
           id, created_at, overall_score, status, processing_status, failure_reason, interview_id,
-          interviews (title, interview_type)
+          interviews (title, interview_type, passing_marks)
         `)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
@@ -146,7 +166,7 @@ export default function DashboardPage() {
               Welcome back! Here is an overview of your interview performance.
             </p>
           </div>
-          <Button onClick={() => router.push("/interview/new")} size="lg" className="shadow-lg">
+          <Button onClick={() => router.push("/interview/new")} size="lg" className="shadow-lg w-full md:w-auto">
             <Plus className="mr-2 h-4 w-4" /> Start New Interview
           </Button>
         </div>
@@ -174,7 +194,31 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground">Across all completed sessions</p>
             </CardContent>
           </Card>
+        </div>
 
+        <div className="grid gap-4 md:grid-cols-3 mb-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Passed Interviews</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.passedCount}</div>
+              <p className="text-xs text-muted-foreground">{stats.passPercentage}% pass rate</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Failed Interviews</CardTitle>
+              <XCircle className="h-4 w-4 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.failedCount}</div>
+              <p className="text-xs text-muted-foreground">Did not meet passing marks</p>
+            </CardContent>
+          </Card>
+          
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Best Performance</CardTitle>
@@ -215,17 +259,21 @@ export default function DashboardPage() {
                       <div className={`text-xs font-semibold px-2 py-1 rounded-full ${
                         session.processing_status === 'pending' || session.processing_status === 'processing'
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 animate-pulse'
-                          : session.processing_status === 'failed'
+                          : session.processing_status === 'failed' || session.status === 'terminated'
                           ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                           : session.status === 'completed' 
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                          ? ((session.overall_score || 0) >= ((session as any).interviews?.passing_marks || 70)
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                              : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400')
                           : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
                       }`}>
                         {session.processing_status === 'pending' || session.processing_status === 'processing'
                           ? 'Under Review'
                           : session.processing_status === 'failed'
                           ? 'Evaluation Failed'
-                          : session.status === 'completed' ? 'Completed' : 'In Progress'}
+                          : session.status === 'terminated'
+                          ? 'Terminated'
+                          : session.status === 'completed' ? ((session.overall_score || 0) >= ((session as any).interviews?.passing_marks || 70) ? 'Passed' : 'Failed') : 'In Progress'}
                       </div>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
@@ -257,6 +305,16 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-1" title={session.failure_reason || "Unknown Error"}>
                           {session.failure_reason || "We encountered an issue evaluating your answers."}
+                        </p>
+                      </div>
+                    ) : session.status === 'terminated' ? (
+                      <div className="flex flex-col items-start justify-center text-red-600 mb-4 h-[50px]">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-sm font-medium">Session Terminated</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1" title={session.failure_reason || "Proctoring Violation"}>
+                          {session.failure_reason || "Proctoring Violation detected"}
                         </p>
                       </div>
                     ) : session.status === 'completed' ? (

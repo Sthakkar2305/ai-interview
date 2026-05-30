@@ -65,6 +65,7 @@ export default function JoinInterviewPage() {
           description: `Role: ${interviewData.role}`,
           interview_type: interviewData.interview_type,
           manual_qa: interviewData.manual_qa,
+          passing_marks: interviewData.passing_marks,
         }])
         .select()
         .single()

@@ -20,11 +20,11 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
   const [detector, setDetector] = useState<any>(null)
   const [warningMessage, setWarningMessage] = useState("")
   const [violationCount, setViolationCount] = useState(0)
-  const MAX_VIOLATIONS = 5
-
-  const violationCountRef = useRef(0)
+  
+  const faceMissingStrikesRef = useRef(0)
   const faceMissingStartRef = useRef<number | null>(null)
   const isCheckingRef = useRef(false)
+  const isTerminatedRef = useRef(false)
 
   // Initialize TF.js and Face Detection model
   useEffect(() => {
@@ -84,21 +84,64 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
     }
   }, [isActive])
 
-  // Proctoring checks: Tab switch and Fullscreen
+  // Capture screenshot and upload to Supabase storage
+  const uploadEvidence = async (fileName: string): Promise<string | null> => {
+    if (!videoRef.current) return null
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = videoRef.current.videoWidth
+      canvas.height = videoRef.current.videoHeight
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+      
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7))
+      if (!blob) return null
+
+      const filePath = `${sessionId}/${Date.now()}_${fileName}.jpg`
+      const { error } = await supabase.storage.from("proctoring-evidence").upload(filePath, blob)
+      if (error) {
+        console.error("Storage upload error:", error)
+        return null
+      }
+      
+      const { data: publicUrlData } = supabase.storage.from("proctoring-evidence").getPublicUrl(filePath)
+      return publicUrlData.publicUrl
+    } catch (e) {
+      console.error("Evidence upload failed:", e)
+      return null
+    }
+  }
+
+  const handleTermination = async (reason: string, violationType: string) => {
+    if (isTerminatedRef.current) return
+    isTerminatedRef.current = true
+
+    setWarningMessage(`CRITICAL VIOLATION: ${reason}. Interview is immediately terminated.`)
+    const screenshotUrl = await uploadEvidence(violationType)
+    await logViolation(violationType, reason, "critical", screenshotUrl)
+    
+    await supabase.from("interview_sessions").update({ 
+      session_status: "terminated",
+      failure_reason: reason 
+    }).eq("id", sessionId)
+    
+    setTimeout(() => onTerminate(), 2000)
+  }
+
+  // Proctoring checks: Tab switch and Fullscreen (ULTRA STRICT)
   useEffect(() => {
     if (!isActive) return
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        logViolation("tab_switch", "Candidate switched tabs or minimized browser", "high")
-        triggerWarning("Tab switching is not allowed during the interview.")
+        handleTermination("Tab switching or browser minimization detected.", "tab_switch")
       }
     }
 
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        logViolation("exited_fullscreen", "Candidate exited fullscreen mode", "medium")
-        triggerWarning("Please remain in fullscreen mode.")
+        handleTermination("Exited fullscreen mode.", "exited_fullscreen")
       }
     }
 
@@ -111,33 +154,49 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
     }
   }, [isActive, sessionId])
 
+  // Custom event listener for Multiple Voices from Transcription
+  useEffect(() => {
+    if (!isActive) return
+    const handleVoiceViolation = () => {
+      handleTermination("Multiple human voices detected in the background.", "multiple_voices")
+    }
+    window.addEventListener("multiple_voices_detected", handleVoiceViolation)
+    return () => window.removeEventListener("multiple_voices_detected", handleVoiceViolation)
+  }, [isActive])
+
   // Proctoring checks: Face detection loop
   useEffect(() => {
-    if (!isActive || !detector || !videoRef.current) return
+    if (!isActive || !detector || !videoRef.current || isTerminatedRef.current) return
 
     const video = videoRef.current
     let animationFrameId: number
 
     const detectFaces = async () => {
-      if (video.readyState === 4 && !isCheckingRef.current) {
+      if (video.readyState === 4 && !isCheckingRef.current && !isTerminatedRef.current) {
         isCheckingRef.current = true
         try {
           const faces = await detector.estimateFaces(video)
           const now = Date.now()
 
           if (faces.length === 0) {
-            // Face missing logic (allow 5 second grace period)
+            // Face missing logic (1.5 second grace period to reduce false positives)
             if (!faceMissingStartRef.current) {
               faceMissingStartRef.current = now
-            } else if (now - faceMissingStartRef.current > 5000) {
-              logViolation("face_missing", "No face detected in camera for >5 seconds", "medium")
-              triggerWarning("Please ensure your face is visible in the camera.")
-              faceMissingStartRef.current = now // reset to avoid spam
+            } else if (now - faceMissingStartRef.current > 1500) {
+              faceMissingStrikesRef.current += 1
+              if (faceMissingStrikesRef.current >= 2) {
+                handleTermination("Face not detected in camera frame repeatedly.", "eye_contact_lost")
+              } else {
+                const screenshot = await uploadEvidence("face_missing_warning")
+                logViolation("face_missing_warning", "Face missing or looking away (Strike 1)", "high", screenshot)
+                setWarningMessage("Please look directly at the screen. One more warning will terminate the interview.")
+                setTimeout(() => setWarningMessage(""), 5000)
+              }
+              faceMissingStartRef.current = null // reset timer
             }
           } else if (faces.length > 1) {
-            // Multiple faces
-            logViolation("multiple_faces", "Multiple faces detected in frame", "high")
-            triggerWarning("Multiple faces detected. You must be alone.")
+            // Multiple faces -> INSTANT TERMINATION
+            handleTermination("Multiple faces detected in the camera frame.", "multiple_faces")
             faceMissingStartRef.current = null
           } else {
             // Good state
@@ -162,33 +221,21 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
 
   const triggerWarning = (msg: string) => {
     setWarningMessage(msg)
-    violationCountRef.current += 1
-    setViolationCount(violationCountRef.current)
-    
-    if (violationCountRef.current >= MAX_VIOLATIONS) {
-      handleTermination()
-    } else {
-      setTimeout(() => setWarningMessage(""), 5000)
-    }
+    setTimeout(() => setWarningMessage(""), 5000)
   }
 
-  const logViolation = async (type: string, description: string, severity: string) => {
+  const logViolation = async (type: string, description: string, severity: string, screenshotUrl: string | null = null) => {
     try {
       await supabase.from("violation_logs").insert([{
         session_id: sessionId,
         violation_type: type,
         description,
-        severity
+        severity,
+        screenshot_url: screenshotUrl
       }])
     } catch (e) {
       console.error("Failed to log violation", e)
     }
-  }
-
-  const handleTermination = async () => {
-    setWarningMessage("Maximum violations reached. The interview is being terminated.")
-    await supabase.from("interview_sessions").update({ session_status: "terminated" }).eq("id", sessionId)
-    onTerminate()
   }
 
   const requestFullscreen = () => {
@@ -223,9 +270,6 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
             <DialogDescription className="text-red-800 dark:text-red-200 text-base py-4 font-medium">
               {warningMessage}
             </DialogDescription>
-            <div className="text-sm text-red-600/80">
-              Violations: {violationCount} / {MAX_VIOLATIONS}
-            </div>
           </DialogHeader>
         </DialogContent>
       </Dialog>

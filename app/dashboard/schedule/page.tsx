@@ -27,6 +27,7 @@ export default function ScheduleInterviewPage() {
   const [role, setRole] = useState("")
   const [difficulty, setDifficulty] = useState("medium")
   const [duration, setDuration] = useState(30)
+  const [passingMarks, setPassingMarks] = useState(70)
   const [scheduledAt, setScheduledAt] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -133,6 +134,7 @@ export default function ScheduleInterviewPage() {
           status: "scheduled",
           document_name: documentName,
           manual_qa: manualQa,
+          passing_marks: passingMarks,
         }])
         .select()
         .single()
@@ -323,7 +325,7 @@ export default function ScheduleInterviewPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Difficulty</Label>
                     <select 
@@ -338,6 +340,10 @@ export default function ScheduleInterviewPage() {
                   <div className="space-y-2">
                     <Label>Duration (Minutes)</Label>
                     <Input type="number" required min={5} max={120} value={duration} onChange={e => setDuration(Number(e.target.value))} disabled={loading} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Passing Marks</Label>
+                    <Input type="number" required min={1} max={100} value={passingMarks} onChange={e => setPassingMarks(Number(e.target.value))} disabled={loading} />
                   </div>
                 </div>
 

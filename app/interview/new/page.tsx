@@ -40,6 +40,7 @@ export default function NewInterviewPage() {
   const [manualQa, setManualQa] = useState<ManualQaItem[]>(createManualQa(3))
   const [difficulty, setDifficulty] = useState("medium")
   const [duration, setDuration] = useState(30)
+  const [passingMarks, setPassingMarks] = useState(70)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [dragActive, setDragActive] = useState(false)
@@ -132,6 +133,7 @@ export default function NewInterviewPage() {
           document_name: null,
           interview_type: "manual",
           manual_qa: normalizedQa,
+          passing_marks: passingMarks,
         },
       ])
       .select()
@@ -201,6 +203,7 @@ export default function NewInterviewPage() {
           document_name: file.name,
           interview_type: "document",
           manual_qa: null,
+          passing_marks: passingMarks,
         },
       ])
       .select()
@@ -346,6 +349,20 @@ export default function NewInterviewPage() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="passingMarks">Passing Marks (0-100)</Label>
+                  <Input
+                    id="passingMarks"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={passingMarks}
+                    onChange={(e) => setPassingMarks(Number(e.target.value))}
+                    disabled={loading}
+                    required
                   />
                 </div>
 

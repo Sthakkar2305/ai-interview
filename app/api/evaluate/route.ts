@@ -3,6 +3,8 @@ import { cookies } from "next/headers"
 import { type NextRequest, NextResponse } from "next/server"
 import { type InterviewMode, type ManualQuestionAnswer } from "@/lib/ai-scoring"
 
+export const maxDuration = 300 // Allow up to 5 minutes for evaluation
+
 export async function POST(request: NextRequest) {
   try {
     const { sessionId } = await request.json()
@@ -80,17 +82,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to queue evaluation" }, { status: 500 })
     }
 
-    // Attempt to trigger the worker immediately (fire-and-forget)
-    // so the user doesn't have to wait for the next cron interval
+    // Wait for the worker to process it immediately, since maxDuration is 300s
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-      // We purposefully don't await this so it runs asynchronously
-      fetch(`${baseUrl}/api/worker`, { method: "POST" }).catch(e => console.error("Worker trigger failed:", e));
+      const workerRes = await fetch(`${baseUrl}/api/worker`, { method: "POST" });
+      if (!workerRes.ok) {
+        console.error("Worker returned non-ok status:", await workerRes.text());
+      }
     } catch (e) {
-      console.error("Failed to construct worker URL:", e);
+      console.error("Failed to trigger or await worker:", e);
     }
 
-    return NextResponse.json({ success: true, status: "pending" }, { status: 202 })
+    return NextResponse.json({ success: true, status: "completed" }, { status: 200 })
 
   } catch (error) {
     console.error("Critical Route Error:", error)

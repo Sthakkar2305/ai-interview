@@ -176,6 +176,10 @@ export default function Home() {
         {/* Small Professional Footer */}
         <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground z-10 bg-slate-50/50 dark:bg-[#0c0f1d]/50">
           <p>© {new Date().getFullYear()} AI Interview Platform. All rights reserved. Powered by state-of-the-art Generative AI.</p>
+          <div className="mt-2 flex justify-center gap-4">
+            <Link href="/terms" className="hover:underline hover:text-foreground transition-colors">Terms & Conditions</Link>
+            <Link href="/privacy" className="hover:underline hover:text-foreground transition-colors">Privacy Policy</Link>
+          </div>
         </footer>
       </div>
     )
@@ -321,6 +325,10 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-border/40 py-8 text-center text-xs text-muted-foreground bg-white/40 dark:bg-black/10">
         <p>© {new Date().getFullYear()} AI Interview Platform. All rights reserved. Powered by state-of-the-art Generative AI.</p>
+        <div className="mt-2 flex justify-center gap-4">
+          <Link href="/terms" className="hover:underline hover:text-foreground transition-colors">Terms & Conditions</Link>
+          <Link href="/privacy" className="hover:underline hover:text-foreground transition-colors">Privacy Policy</Link>
+        </div>
       </footer>
     </div>
   )

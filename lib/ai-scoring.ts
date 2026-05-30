@@ -157,11 +157,18 @@ export async function evaluateAnswer(
 
     const text = completion.choices[0]?.message?.content || ""
 
-    const evaluation = parseJsonObject<AnswerEvaluation>(text)
-    const contentScore = clampScore(evaluation.contentScore)
-    const clarityScore = clampScore(evaluation.clarityScore)
-    const confidenceScore = clampScore(evaluation.confidenceScore)
-    const keywordMatch = clampScore(evaluation.keywordMatch)
+    const rawEval = parseJsonObject<Record<string, any>>(text)
+    const normalized: Record<string, any> = {}
+    if (rawEval && typeof rawEval === 'object') {
+      for (const key of Object.keys(rawEval)) {
+        normalized[key.toLowerCase().replace(/_/g, '')] = rawEval[key]
+      }
+    }
+
+    const contentScore = clampScore(normalized.contentscore)
+    const clarityScore = clampScore(normalized.clarityscore)
+    const confidenceScore = clampScore(normalized.confidencescore)
+    const keywordMatch = clampScore(normalized.keywordmatch)
 
     return {
       contentScore,
@@ -169,9 +176,9 @@ export async function evaluateAnswer(
       confidenceScore,
       keywordMatch,
       overallScore: contentScore * 0.4 + clarityScore * 0.3 + confidenceScore * 0.2 + keywordMatch * 0.1,
-      strengths: asStringArray(evaluation.strengths),
-      weaknesses: asStringArray(evaluation.weaknesses),
-      suggestions: asStringArray(evaluation.suggestions),
+      strengths: asStringArray(normalized.strengths),
+      weaknesses: asStringArray(normalized.weaknesses),
+      suggestions: asStringArray(normalized.suggestions),
     }
   } catch (error) {
     console.error("[v0] Answer evaluation error:", error)
@@ -268,24 +275,31 @@ export async function evaluateSession(
 
     const text = completion.choices[0]?.message?.content || ""
 
-    const evaluation = parseJsonObject<SessionEvaluation>(text)
+    const rawEval = parseJsonObject<Record<string, any>>(text)
+    const normalized: Record<string, any> = {}
+    if (rawEval && typeof rawEval === 'object') {
+      for (const key of Object.keys(rawEval)) {
+        normalized[key.toLowerCase().replace(/_/g, '')] = rawEval[key]
+      }
+    }
+
     const vocabularyUpgrades =
-      evaluation.vocabularyUpgrades && typeof evaluation.vocabularyUpgrades === "object"
-        ? (evaluation.vocabularyUpgrades as Record<string, string>)
+      normalized.vocabularyupgrades && typeof normalized.vocabularyupgrades === "object"
+        ? (normalized.vocabularyupgrades as Record<string, string>)
         : {}
 
     return {
-      overallScore: clampScore(evaluation.overallScore),
-      knowledgeScore: clampScore(evaluation.knowledgeScore),
-      communicationScore: clampScore(evaluation.communicationScore),
-      confidenceScore: clampScore(evaluation.confidenceScore),
-      technicalDepthScore: clampScore(evaluation.technicalDepthScore),
-      strengths: asStringArray(evaluation.strengths),
-      weaknesses: asStringArray(evaluation.weaknesses),
-      missedConcepts: asStringArray(evaluation.missedConcepts),
-      improvementSuggestions: asStringArray(evaluation.improvementSuggestions),
+      overallScore: clampScore(normalized.overallscore),
+      knowledgeScore: clampScore(normalized.knowledgescore),
+      communicationScore: clampScore(normalized.communicationscore),
+      confidenceScore: clampScore(normalized.confidencescore),
+      technicalDepthScore: clampScore(normalized.technicaldepthscore),
+      strengths: asStringArray(normalized.strengths),
+      weaknesses: asStringArray(normalized.weaknesses),
+      missedConcepts: asStringArray(normalized.missedconcepts),
+      improvementSuggestions: asStringArray(normalized.improvementsuggestions),
       vocabularyUpgrades,
-      tipsToImprove: asStringArray(evaluation.tipsToImprove),
+      tipsToImprove: asStringArray(normalized.tipstoimprove),
     }
   } catch (error) {
     console.error("[v0] Session evaluation error:", error)

@@ -37,26 +37,31 @@ async function processWorkerJob(request: Request) {
     }
   })
 
-  // 3. Fetch one pending job
-  console.log("[Worker Endpoint] Checking for pending evaluation jobs...")
-  const { data: job, error: fetchError } = await supabase
-    .from("interview_sessions")
-    .select("id, interview_id")
-    .eq("processing_status", "pending")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single()
+  const startTime = Date.now()
+  let processedCount = 0
+  const maxExecutionTime = 4 * 60 * 1000 // 4 minutes
 
-  if (fetchError || !job) {
-    if (fetchError && fetchError.code !== "PGRST116") {
-      console.error("[Worker Endpoint] Error fetching jobs:", fetchError.message)
-      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  while (Date.now() - startTime < maxExecutionTime) {
+    // 3. Fetch one pending job
+    console.log("[Worker Endpoint] Checking for pending evaluation jobs...")
+    const { data: job, error: fetchError } = await supabase
+      .from("interview_sessions")
+      .select("id, interview_id")
+      .eq("processing_status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .single()
+
+    if (fetchError || !job) {
+      if (fetchError && fetchError.code !== "PGRST116") {
+        console.error("[Worker Endpoint] Error fetching jobs:", fetchError.message)
+        if (processedCount === 0) return NextResponse.json({ error: fetchError.message }, { status: 500 })
+      }
+      break // No more jobs
     }
-    return NextResponse.json({ status: "idle", message: "No pending evaluation jobs found." })
-  }
 
-  const sessionId = job.id
-  console.log(`[Worker Endpoint] Found pending job: ${sessionId}. Starting processing...`)
+    const sessionId = job.id
+    console.log(`[Worker Endpoint] Found pending job: ${sessionId}. Starting processing...`)
 
   // 4. Update status to processing
   await supabase
@@ -156,11 +161,9 @@ async function processWorkerJob(request: Request) {
     })
 
     console.log(`[Worker Endpoint] Successfully completed job for session ${sessionId}`)
-    return NextResponse.json({ status: "success", sessionId, overallScore: evaluation.overallScore })
-
   } catch (error: any) {
     console.error(`[Worker Endpoint] Job failed for session ${sessionId}:`, error)
-
+    // Mark failed but continue loop for other jobs
     const { data: currentJob } = await supabase.from("interview_sessions").select("retry_count").eq("id", sessionId).single()
     const retryCount = (currentJob?.retry_count || 0) + 1
 
@@ -179,7 +182,9 @@ async function processWorkerJob(request: Request) {
         retry_count: retryCount
       }).eq("id", sessionId)
     }
-
-    return NextResponse.json({ status: "failed", sessionId, error: error.message }, { status: 500 })
   }
+  processedCount++
+}
+
+return NextResponse.json({ status: "success", processed: processedCount })
 }

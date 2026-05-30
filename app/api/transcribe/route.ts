@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
 
     if (!audioBlob) return NextResponse.json({ error: "No audio" }, { status: 400 })
 
-    // 3. Send to Deepgram
-    const deepgramResponse = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true", {
+    // 3. Send to Deepgram with diarization enabled
+    const deepgramResponse = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true", {
       method: "POST",
       headers: {
         "Authorization": `Token ${process.env.DEEPGRAM_API_KEY}`,
@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
     const data = await deepgramResponse.json()
     const transcript = data.results?.channels[0]?.alternatives[0]?.transcript || ""
     const confidence = data.results?.channels[0]?.alternatives[0]?.confidence || 0
+    
+    // Check for multiple voices using diarization
+    const words = data.results?.channels[0]?.alternatives[0]?.words || []
+    const uniqueSpeakers = new Set(words.map((w: any) => w.speaker).filter((s: any) => s !== undefined))
+    const hasMultipleVoices = uniqueSpeakers.size > 1
 
     // 4. Save to Database
     const { error: dbError } = await supabase.from("interview_answers").insert({
@@ -50,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (dbError) console.error("DB Save Error:", dbError)
 
-    return NextResponse.json({ transcript })
+    return NextResponse.json({ transcript, hasMultipleVoices })
 
   } catch (error) {
     console.error("Transcribe Route Error:", error)

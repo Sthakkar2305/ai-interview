@@ -316,9 +316,27 @@ export default function InterviewSessionPage() {
 
   // Timer logic is now handled by InterviewTimer component
 
-  const startInterview = () => {
+  const startInterview = async () => {
+    if (!videoEnabled || !stream) {
+      setError("Camera and microphone access are strictly required to start the interview.")
+      return
+    }
+
+    if (!document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen()
+      } catch (err) {
+        setError("Fullscreen is strictly required to start the interview. Please allow fullscreen.")
+        return
+      }
+    }
+
     setSessionStarted(true)
     askedQuestionsRef.current = []
+    
+    // Pre-warm the SpeechSynthesis to unlock it for future API responses
+    speakText("Starting your interview now. Good luck!")
+    
     void generateNextQuestion(0)
   }
 
@@ -483,8 +501,12 @@ export default function InterviewSessionPage() {
       formData.append("questionId", currentQuestionId)
 
       const response = await fetch("/api/transcribe", { method: "POST", body: formData })
-      const data = (await response.json()) as { transcript?: string }
+      const data = (await response.json()) as { transcript?: string, hasMultipleVoices?: boolean }
       transcript = data.transcript || ""
+
+      if (data.hasMultipleVoices) {
+        window.dispatchEvent(new Event("multiple_voices_detected"))
+      }
     } catch (uploadError) {
       console.error("Upload failed", uploadError)
     } finally {
@@ -666,7 +688,7 @@ export default function InterviewSessionPage() {
         isActive={sessionStarted && !isTerminated} 
         onTerminate={() => setIsTerminated(true)} 
       />
-      <header className="p-4 border-b flex justify-between items-center bg-card">
+      <header className="p-4 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card">
         <div>
           <h1 className="font-bold">Live Interview</h1>
           <p className="text-xs text-muted-foreground capitalize">{config.mode} mode</p>
@@ -713,18 +735,25 @@ export default function InterviewSessionPage() {
 
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-6">
-              <h3 className="text-xs font-bold uppercase text-primary mb-2">Current Question</h3>
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-xs font-bold uppercase text-primary">Current Question</h3>
+                {currentQuestion && !isProcessing && (
+                  <Button variant="outline" size="sm" onClick={() => speakText(currentQuestion)}>
+                    Repeat Audio
+                  </Button>
+                )}
+              </div>
               <p className="text-xl font-medium">{currentQuestion || "Preparing..."}</p>
             </CardContent>
           </Card>
 
-          <div className="flex justify-center">
+          <div className="flex justify-center w-full">
             {isAnswering ? (
-              <Button variant="destructive" size="lg" onClick={handleAnswerComplete} className="w-40 h-12">
+              <Button variant="destructive" size="lg" onClick={handleAnswerComplete} className="w-full sm:w-40 h-12">
                 Finish Answer
               </Button>
             ) : (
-              <Button disabled variant="secondary" size="lg" className="w-40 h-12">
+              <Button disabled variant="secondary" size="lg" className="w-full sm:w-40 h-12">
                 Listening...
               </Button>
             )}

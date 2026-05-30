@@ -107,3 +107,13 @@ USING (
 CREATE INDEX IF NOT EXISTS idx_scheduled_interviews_token ON public.scheduled_interviews(access_token);
 CREATE INDEX IF NOT EXISTS idx_proctoring_events_session ON public.proctoring_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_violation_logs_session ON public.violation_logs(session_id);
+
+-- 6. Add Pass/Fail System and Strict Proctoring Fields
+ALTER TABLE public.scheduled_interviews ADD COLUMN IF NOT EXISTS passing_marks INTEGER DEFAULT 70;
+ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS passing_marks INTEGER DEFAULT 70;
+
+ALTER TABLE public.violation_logs ADD COLUMN IF NOT EXISTS screenshot_url TEXT;
+ALTER TABLE public.violation_logs ADD COLUMN IF NOT EXISTS audio_metadata JSONB;
+
+-- 7. Create Storage Bucket for Proctoring Evidence
+INSERT INTO storage.buckets (id, name, public) VALUES ('proctoring-evidence', 'proctoring-evidence', true) ON CONFLICT DO NOTHING;
