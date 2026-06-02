@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Users, Video, Activity, ShieldCheck, Search } from "lucide-react"
+import { Users, Video, Activity, ShieldCheck, Search, Building } from "lucide-react"
 import { DeleteUserButton, DeleteSessionButton } from "@/components/admin/DeleteButtons"
+import { ApproveCompanyButton } from "@/components/admin/ApproveCompanyButton"
 
 // Force dynamic rendering so stats are always fresh on page load
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,19 @@ export default async function AdminDashboard() {
     .select("*")
     .order("created_at", { ascending: false })
 
+  // Fetch all users to get their metadata (roles & statuses)
+  const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers()
+  
+  // Merge metadata into profiles
+  const profilesWithMeta = profiles?.map(profile => {
+    const authUser = authUsers?.find(u => u.id === profile.id)
+    return {
+      ...profile,
+      role: authUser?.user_metadata?.role || "candidate",
+      status: authUser?.user_metadata?.status || "approved"
+    }
+  }) || []
+
   // Fetch all interviews (templates)
   const { data: interviews } = await supabase
     .from("interviews")
@@ -40,7 +54,7 @@ export default async function AdminDashboard() {
 
   // Manually join the data to ensure it works regardless of database FK constraints
   const sessions = rawSessions?.map(session => {
-    const profile = profiles?.find(p => p.id === session.user_id)
+    const profile = profilesWithMeta?.find(p => p.id === session.user_id)
     const interview = interviews?.find(i => i.id === session.interview_id)
     return {
       ...session,
@@ -49,7 +63,8 @@ export default async function AdminDashboard() {
     }
   }) || []
 
-  const totalUsers = profiles?.length || 0
+  const pendingCompanies = profilesWithMeta?.filter(p => p.role === 'company' && p.status === 'pending') || []
+  const totalUsers = profilesWithMeta?.length || 0
   const totalInterviews = interviews?.length || 0
   const totalSessions = sessions?.length || 0
   
@@ -117,16 +132,45 @@ export default async function AdminDashboard() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-12">
         
         {/* User Profiles Table */}
-        <Card className="lg:col-span-5 shadow-lg border-border/40">
-          <CardHeader className="border-b bg-slate-50/50 dark:bg-card/50 pb-4">
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" /> Profile Database
-            </CardTitle>
-            <CardDescription>All user accounts created on the platform.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="flex flex-col h-[600px] overflow-y-auto">
-              {profiles?.map((profile, index) => {
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          
+          {pendingCompanies.length > 0 && (
+            <Card className="shadow-lg border-amber-500/50">
+              <CardHeader className="border-b bg-amber-500/10 pb-4">
+                <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+                  <Building className="h-5 w-5" /> Pending Companies
+                </CardTitle>
+                <CardDescription>Companies waiting for approval.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                  {pendingCompanies.map((profile, index) => (
+                    <div key={profile.id} className={`flex items-center justify-between p-4 ${index !== 0 ? 'border-t' : ''}`}>
+                      <div>
+                        <div className="font-semibold text-sm">{profile.full_name || "Unknown Company"}</div>
+                        <div className="text-xs text-muted-foreground">{profile.email}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <ApproveCompanyButton userId={profile.id} companyName={profile.full_name || profile.email} />
+                        <DeleteUserButton userId={profile.id} userName={profile.full_name || profile.email} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="shadow-lg border-border/40">
+            <CardHeader className="border-b bg-slate-50/50 dark:bg-card/50 pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" /> Profile Database
+              </CardTitle>
+              <CardDescription>All user accounts created on the platform.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="flex flex-col h-[600px] overflow-y-auto">
+                {profilesWithMeta?.map((profile, index) => {
                 const userSessions = rawSessions?.filter(s => s.user_id === profile.id) || []
                 return (
                 <div key={profile.id} className={`flex items-center justify-between p-4 ${index !== 0 ? 'border-t' : ''} hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors`}>
@@ -135,7 +179,12 @@ export default async function AdminDashboard() {
                       {(profile.full_name || profile.email || "?").charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-semibold text-sm">{profile.full_name || "Unknown User"}</div>
+                      <div className="font-semibold text-sm flex items-center gap-2">
+                        {profile.full_name || "Unknown User"}
+                        {profile.role === 'company' && (
+                          <span className="text-[10px] uppercase bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Company</span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">{profile.email}</div>
                     </div>
                   </div>
@@ -146,13 +195,13 @@ export default async function AdminDashboard() {
                         Joined: {new Date(profile.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    {profile.email !== 'sthakkar837@gmail.com' && (
+                    {profile.email !== 'sthakkar8370@gmail.com' && (
                       <DeleteUserButton userId={profile.id} userName={profile.full_name || profile.email} />
                     )}
                   </div>
                 </div>
               )})}
-              {profiles?.length === 0 && (
+              {profilesWithMeta?.length === 0 && (
                 <div className="text-center text-muted-foreground p-8 flex flex-col items-center">
                   <Search className="h-8 w-8 mb-2 opacity-20" />
                   No users found in database.
@@ -160,7 +209,8 @@ export default async function AdminDashboard() {
               )}
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
 
         {/* Sessions Activity Log */}
         <Card className="lg:col-span-7 shadow-lg border-border/40">

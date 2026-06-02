@@ -50,6 +50,13 @@ export default function LoginPage() {
         return
       }
 
+      if (data.user?.user_metadata?.role === 'company' && data.user?.user_metadata?.status !== 'approved') {
+        await supabase.auth.signOut()
+        setError("Your Company profile is still under review. It will take 1-2 working days to confirm your ID.")
+        setLoading(false)
+        return
+      }
+
       console.log("[v0] Login successful for:", email)
       // Wait a moment for auth state to update
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -117,11 +124,6 @@ export default function LoginPage() {
             </Link>
           </p>
 
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700">
-            <p className="font-semibold mb-1">Demo Credentials:</p>
-            <p>Email: smit@gmail.com</p>
-            <p>Password: 123456789</p>
-          </div>
         </CardContent>
       </Card>
     </div>

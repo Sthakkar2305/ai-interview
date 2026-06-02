@@ -21,7 +21,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const { data: { user } } = await supabase.auth.getUser()
 
   // STRICT Security Check
-  if (!user || user.email !== "sthakkar837@gmail.com") {
+  if (!user || user.email !== "sthakkar8370@gmail.com") {
     redirect("/")
   }
 

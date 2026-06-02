@@ -20,7 +20,7 @@ const verifyAdminAndGetClient = async () => {
   )
 
   const { data: { user } } = await authClient.auth.getUser()
-  if (!user || user.email !== "sthakkar837@gmail.com") {
+  if (!user || user.email !== "sthakkar8370@gmail.com") {
     throw new Error("Unauthorized: Only the Super Admin can perform this action.")
   }
 
@@ -59,5 +59,27 @@ export async function deleteSessionAction(sessionId: string) {
   } catch (err: any) {
     console.error("Delete session failed:", err)
     return { success: false, error: err.message || "Failed to delete session" }
+  }
+}
+
+export async function approveCompanyAction(userId: string) {
+  try {
+    const adminClient = await verifyAdminAndGetClient()
+    
+    // Fetch the user first to get their existing metadata
+    const { data: { user }, error: fetchError } = await adminClient.auth.admin.getUserById(userId)
+    if (fetchError || !user) throw fetchError || new Error("User not found")
+      
+    const newMetadata = { ...user.user_metadata, status: 'approved' }
+
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      user_metadata: newMetadata
+    })
+    
+    if (error) throw error
+    return { success: true }
+  } catch (err: any) {
+    console.error("Approve company failed:", err)
+    return { success: false, error: err.message || "Failed to approve company" }
   }
 }

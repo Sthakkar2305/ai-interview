@@ -226,7 +226,7 @@ export default function Home() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-border/40">
           <div>
             <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">
-              Welcome back, <span className="bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">{user.email}</span> 👋
+              Welcome back, <span className="bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">{user.user_metadata?.full_name || user.email}</span> 👋
             </h1>
             <p className="text-muted-foreground text-sm lg:text-base mt-1.5">
               Launch a new mock interview session, manage schedules, or review your historical evaluations.
@@ -244,11 +244,12 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
           {/* Action A: Create / Start New Mock Interview */}
-          <div 
-            onClick={() => router.push("/interview/new")} 
-            className="group cursor-pointer bg-white dark:bg-[#111425] border border-border/40 hover:border-violet-500/50 hover:shadow-2xl hover:shadow-violet-600/5 transition-all duration-300 rounded-2xl p-8 flex flex-col relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+          {(!user.user_metadata?.role || user.user_metadata?.role === 'candidate') && (
+            <div 
+              onClick={() => router.push("/interview/new")} 
+              className="group cursor-pointer bg-white dark:bg-[#111425] border border-border/40 hover:border-violet-500/50 hover:shadow-2xl hover:shadow-violet-600/5 transition-all duration-300 rounded-2xl p-8 flex flex-col relative overflow-hidden md:col-span-2 lg:col-span-1"
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 rounded-full blur-xl group-hover:scale-125 transition-transform" />
             
             <div className="p-4 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-2xl w-fit mb-6 transition-transform group-hover:scale-110">
               <GraduationCap className="h-7 w-7" />
@@ -269,14 +270,16 @@ export default function Home() {
                 Configure & Start
               </Button>
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Action B: Recruiter Schedulers */}
-          <div 
-            onClick={() => router.push("/dashboard/schedule")} 
-            className="group cursor-pointer bg-white dark:bg-[#111425] border border-border/40 hover:border-indigo-500/50 hover:shadow-2xl hover:shadow-indigo-600/5 transition-all duration-300 rounded-2xl p-8 flex flex-col relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-600/10 to-blue-600/10 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+          {user.user_metadata?.role === 'company' && (
+            <div 
+              onClick={() => router.push("/dashboard/schedule")} 
+              className="group cursor-pointer bg-white dark:bg-[#111425] border border-border/40 hover:border-indigo-500/50 hover:shadow-2xl hover:shadow-indigo-600/5 transition-all duration-300 rounded-2xl p-8 flex flex-col relative overflow-hidden md:col-span-2 lg:col-span-1"
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-600/10 to-blue-600/10 rounded-full blur-xl group-hover:scale-125 transition-transform" />
 
             <div className="p-4 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl w-fit mb-6 transition-transform group-hover:scale-110">
               <Briefcase className="h-7 w-7" />
@@ -297,7 +300,8 @@ export default function Home() {
                 Open Schedule Portal
               </Button>
             </div>
-          </div>
+            </div>
+          )}
 
         </div>
 

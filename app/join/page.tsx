@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSupabaseClient } from "@/lib/supabase-client"
 import { Loader2, ShieldCheck, Video } from "lucide-react"
+import { verifyAndCreateAnonymousCandidate } from "./actions"
 
 export default function JoinInterviewPage() {
   const router = useRouter()
@@ -17,14 +18,15 @@ export default function JoinInterviewPage() {
 
   const [interviewId, setInterviewId] = useState("")
   const [token, setToken] = useState("")
+  const [fullName, setFullName] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) {
-      // Typically candidates might have anonymous accounts or we force them to sign in.
-      router.push("/auth/login?redirect=/join")
+    
+    if (!fullName || !interviewId || !token) {
+      setError("Please fill in all fields")
       return
     }
 
@@ -32,35 +34,31 @@ export default function JoinInterviewPage() {
     setError("")
 
     try {
-      // Verify the scheduled interview
-      const { data: interviewData, error: interviewError } = await supabase
-        .from("scheduled_interviews")
-        .select("*")
-        .eq("id", interviewId)
-        .eq("access_token", token)
-        .single()
-
-      if (interviewError || !interviewData) {
-        throw new Error("Invalid Interview ID or Access Token")
-      }
-
-      if (interviewData.status === 'completed' || interviewData.status === 'terminated') {
-        throw new Error("This interview session has already ended.")
-      }
-
-      const now = new Date()
-      if (new Date(interviewData.expires_at) < now) {
-        throw new Error("This interview session has expired.")
-      }
-
-      // Instead of creating the 'interviews' table row manually, we can directly create a session
-      // if the system expects an interview_id pointing to the 'interviews' table, 
-      // we need to mirror the scheduled interview into the 'interviews' table first for the foreign key.
+      // 1. Verify and create the temporary invisible user on the server
+      const res = await verifyAndCreateAnonymousCandidate(interviewId, token, fullName)
       
+      if (res.error || !res.email || !res.password || !res.interviewData) {
+        throw new Error(res.error || "Verification failed.")
+      }
+
+      // 2. Log in the candidate with the temporary credentials
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: res.email,
+        password: res.password
+      })
+
+      if (authError || !authData.user) {
+        throw new Error("Failed to authenticate session.")
+      }
+
+      const candidateId = authData.user.id
+      const interviewData = res.interviewData
+
+      // 3. Create the base interview instance for this candidate
       const { data: baseInterview, error: baseError } = await supabase
         .from("interviews")
         .insert([{
-          user_id: user.id, // Candidate owns this instance
+          user_id: candidateId,
           title: interviewData.title,
           description: `Role: ${interviewData.role}`,
           interview_type: interviewData.interview_type,
@@ -72,12 +70,12 @@ export default function JoinInterviewPage() {
 
       if (baseError) throw new Error("Failed to initialize interview instance: " + baseError.message)
 
-      // Create session
+      // 4. Create the interview session
       const { data: sessionData, error: sessionError } = await supabase
         .from("interview_sessions")
         .insert([{
           interview_id: baseInterview.id,
-          user_id: user.id,
+          user_id: candidateId,
           status: "in_progress",
         }])
         .select()
@@ -96,13 +94,13 @@ export default function JoinInterviewPage() {
         documentContent = qc.extractedContent || ""
       }
 
-      // Store config in session storage so the interview page can read it immediately
+      // 5. Store config in session storage so the interview page can read it immediately
       sessionStorage.setItem(
         `interview_config_${sessionData.id}`,
         JSON.stringify({
-          duration: interviewData.duration_minutes,
+          duration: interviewData.duration_minutes || 30,
           questionCount: Array.isArray(interviewData.manual_qa) ? interviewData.manual_qa.length : 5,
-          difficulty: interviewData.difficulty,
+          difficulty: interviewData.difficulty || "medium",
           mode: interviewData.interview_type,
           manualQa: interviewData.manual_qa || [],
           topics,
@@ -111,10 +109,10 @@ export default function JoinInterviewPage() {
         }),
       )
 
-      // Update scheduled_interviews status
+      // 6. Update scheduled_interviews status
       await supabase
         .from("scheduled_interviews")
-        .update({ status: 'active', candidate_id: user.id })
+        .update({ status: 'active', candidate_id: candidateId })
         .eq("id", interviewId)
 
       // Jump straight into the interview!
@@ -141,6 +139,16 @@ export default function JoinInterviewPage() {
           <form onSubmit={handleJoin} className="space-y-5">
             {error && <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded font-medium">{error}</div>}
             
+            <div className="space-y-2">
+              <Label>Your Full Name</Label>
+              <Input 
+                required 
+                value={fullName} 
+                onChange={e => setFullName(e.target.value)} 
+                placeholder="John Doe" 
+              />
+            </div>
+
             <div className="space-y-2">
               <Label>Interview ID</Label>
               <Input 
