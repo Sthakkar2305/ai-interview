@@ -369,7 +369,9 @@ export default function InterviewSessionPage() {
 
   const generateDocumentQuestion = async (index: number, previousAnswer?: string): Promise<GeneratedQuestion> => {
     if (!config) return getOpeningDocumentQuestion(normalizeConfig({}))
-    if (index === 0) return getOpeningDocumentQuestion(config)
+    
+    // For index === 0, we still call the API to generate a creative opening question 
+    // based on the document and difficulty, rather than returning a hardcoded string.
 
     const response = await fetch("/api/generate-question", {
       method: "POST",

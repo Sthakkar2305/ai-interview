@@ -44,59 +44,63 @@ export async function POST(request: NextRequest) {
       ? body.askedQuestions.filter((question): question is string => typeof question === "string")
       : []
 
-    if (!body.previousQuestion || !body.previousAnswer) {
-      return NextResponse.json(
-        { question: fallbackQuestion(topics, askedQuestions), expectedKeywords: topics.slice(0, 4) },
-        { status: 200 },
-      )
+    const isFirstQuestion = !body.previousQuestion || !body.previousAnswer;
+    
+    let difficultyInstructions = "";
+    switch (body.difficulty) {
+      case "easy":
+        difficultyInstructions = "Difficulty: EASY. Ask basic definitional questions, simple concepts, or ask them to describe a straightforward past experience.";
+        break;
+      case "medium":
+        difficultyInstructions = "Difficulty: MEDIUM. Ask scenario-based questions, comparisons between technologies/concepts, and practical application questions.";
+        break;
+      case "hard":
+        difficultyInstructions = "Difficulty: HARD. Ask complex architectural questions, edge cases, intense cross-examination, and 'what-if' scenarios. Scrutinize their previous answer heavily if they made a mistake.";
+        break;
+      default:
+        difficultyInstructions = "Difficulty: MIXED. Adapt dynamically based on the context.";
     }
 
-    const prompt = `You are running a live document-based interview.
+    const prompt = `You are running a live document-based interview. BE HIGHLY CREATIVE. Never ask the same cliché questions.
 
-Generate exactly one next follow-up question based on:
+Generate exactly one ${isFirstQuestion ? "opening interview question" : "follow-up question"} based on:
 - The uploaded document context
-- The previous question
-- The candidate's previous spoken answer
-- The requested difficulty
+- The candidate's requested difficulty level (${body.difficulty || "medium"})
+${!isFirstQuestion ? "- The previous question and the candidate's spoken answer" : ""}
 
 Rules:
+- ${difficultyInstructions}
 - Do not repeat any previously asked question.
-- Keep the question concise and interview-ready.
-- Ask a follow-up that probes deeper into the document and the candidate's response.
+- Make it sound like a natural spoken question from a human interviewer.
 - Return only valid JSON.
 
 Document excerpt:
 ${(body.documentContent || "").substring(0, 2500)}
 
-Topics:
+Topics to cover:
 ${topics.join(", ")}
 
-Key concepts:
-${Object.values(keyConcepts).flat().join(", ")}
+Previously asked questions (Do NOT repeat these):
+${askedQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 
-Previously asked questions:
-${askedQuestions.map((question, index) => `${index + 1}. ${question}`).join("\n")}
-
-Previous question:
+${isFirstQuestion ? "Since this is the first question, ask a strong introductory question probing one of their core skills or topics from their document." : `Previous question:
 ${body.previousQuestion}
 
 Previous spoken answer:
-${body.previousAnswer}
-
-Difficulty: ${body.difficulty || "medium"}
+${body.previousAnswer}`}
 
 JSON schema:
 {
   "question": "single next interview question",
-  "expectedKeywords": ["keyword or concept", "keyword or concept"]
+  "expectedKeywords": ["keyword1", "keyword2", "keyword3"]
 }`
 
     const completion = await openai.chat.completions.create({
       model: DEEPSEEK_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: 1,
+      temperature: 0.9,
       top_p: 0.95,
-      max_tokens: 8192,
+      max_tokens: 1500,
       chat_template_kwargs: { thinking: true },
       stream: true,
     } as any)
