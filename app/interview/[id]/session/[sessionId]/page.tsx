@@ -105,8 +105,28 @@ export default function InterviewSessionPage() {
   const [isExpired, setIsExpired] = useState(false)
   const [expiryReason, setExpiryReason] = useState("")
   const [isCheckingStatus, setIsCheckingStatus] = useState(true)
+  const [canSubmitAnswer, setCanSubmitAnswer] = useState(false)
+  const [canSubmitCountdown, setCanSubmitCountdown] = useState(10)
 
-  const speakText = (text: string) => {
+  useEffect(() => {
+    if (isAnswering) {
+      setCanSubmitAnswer(false)
+      setCanSubmitCountdown(10)
+      const interval = setInterval(() => {
+        setCanSubmitCountdown((prev) => {
+          if (prev <= 1) {
+            setCanSubmitAnswer(true)
+            clearInterval(interval)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(interval)
+    }
+  }, [isAnswering, questionCount])
+
+  const speakText = (text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel()
 
@@ -490,30 +510,37 @@ export default function InterviewSessionPage() {
     setIsAnswering(false)
     setIsProcessing(true)
 
-    if (mediaRecorderRef.current.state === "recording") mediaRecorderRef.current.stop()
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    const processAudio = async () => {
+      const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm"
+      const audioBlob = new Blob(chunksRef.current, { type: mimeType })
+      let transcript = ""
 
-    const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" })
-    let transcript = ""
+      try {
+        const formData = new FormData()
+        formData.append("audio", audioBlob)
+        formData.append("sessionId", sessionId)
+        formData.append("questionId", currentQuestionId)
 
-    try {
-      const formData = new FormData()
-      formData.append("audio", audioBlob)
-      formData.append("sessionId", sessionId)
-      formData.append("questionId", currentQuestionId)
+        const response = await fetch("/api/transcribe", { method: "POST", body: formData })
+        const data = (await response.json()) as { transcript?: string, hasMultipleVoices?: boolean }
+        transcript = data.transcript || ""
 
-      const response = await fetch("/api/transcribe", { method: "POST", body: formData })
-      const data = (await response.json()) as { transcript?: string, hasMultipleVoices?: boolean }
-      transcript = data.transcript || ""
-
-      if (data.hasMultipleVoices) {
-        window.dispatchEvent(new Event("multiple_voices_detected"))
+        if (data.hasMultipleVoices) {
+          window.dispatchEvent(new Event("multiple_voices_detected"))
+        }
+      } catch (uploadError) {
+        console.error("Upload failed", uploadError)
+      } finally {
+        setIsProcessing(false)
+        await generateNextQuestion(questionCount, transcript)
       }
-    } catch (uploadError) {
-      console.error("Upload failed", uploadError)
-    } finally {
-      setIsProcessing(false)
-      await generateNextQuestion(questionCount, transcript)
+    }
+
+    if (mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.onstop = processAudio
+      mediaRecorderRef.current.stop()
+    } else {
+      await processAudio()
     }
   }
 
@@ -751,9 +778,15 @@ export default function InterviewSessionPage() {
 
           <div className="flex justify-center w-full">
             {isAnswering ? (
-              <Button variant="destructive" size="lg" onClick={handleAnswerComplete} className="w-full sm:w-40 h-12">
-                Finish Answer
-              </Button>
+              canSubmitAnswer ? (
+                <Button variant="destructive" size="lg" onClick={handleAnswerComplete} className="w-full sm:w-40 h-12">
+                  Finish Answer
+                </Button>
+              ) : (
+                <Button disabled variant="secondary" size="lg" className="w-full sm:w-60 h-12">
+                  Please speak for {canSubmitCountdown}s...
+                </Button>
+              )
             ) : (
               <Button disabled variant="secondary" size="lg" className="w-full sm:w-40 h-12">
                 Listening...
