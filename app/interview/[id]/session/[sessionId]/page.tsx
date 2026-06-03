@@ -488,7 +488,11 @@ export default function InterviewSessionPage() {
 
     if (stream) {
       try {
-        const recorder = new MediaRecorder(stream)
+        // Extract only the audio tracks so we don't record massive video files
+        const audioTracks = stream.getAudioTracks()
+        const audioStream = new MediaStream(audioTracks)
+        
+        const recorder = new MediaRecorder(audioStream)
         mediaRecorderRef.current = recorder
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) chunksRef.current.push(event.data)
