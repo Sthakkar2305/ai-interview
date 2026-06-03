@@ -45,9 +45,7 @@ export async function GET(request: Request) {
           await supabase.from("profiles").insert({
             id: user.id,
             email: user.email,
-            full_name: user.user_metadata?.full_name || user.user_metadata?.name || "Google User",
-            role: "candidate", // Default Google signups to candidate
-            status: "approved"
+            full_name: user.user_metadata?.full_name || user.user_metadata?.name || "Google User"
           })
         }
       }
