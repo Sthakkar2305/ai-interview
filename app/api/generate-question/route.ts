@@ -49,16 +49,16 @@ export async function POST(request: NextRequest) {
     let difficultyInstructions = "";
     switch (body.difficulty) {
       case "easy":
-        difficultyInstructions = "Difficulty: EASY. Ask basic definitional questions, simple concepts, or ask them to describe a straightforward past experience.";
+        difficultyInstructions = "CRITICAL REQUIREMENT - Difficulty: EASY. You MUST ask very basic, entry-level questions. Focus on simple definitions, general concepts, or straightforward past experiences. Do NOT ask complex scenario questions. The candidate is a beginner.";
         break;
       case "medium":
-        difficultyInstructions = "Difficulty: MEDIUM. Ask scenario-based questions, comparisons between technologies/concepts, and practical application questions.";
+        difficultyInstructions = "CRITICAL REQUIREMENT - Difficulty: MEDIUM. You MUST ask moderate scenario-based questions, comparisons between technologies, and practical application questions. The candidate has some experience, so push them a little bit but do not be overly harsh.";
         break;
       case "hard":
-        difficultyInstructions = "Difficulty: HARD. Ask complex architectural questions, edge cases, intense cross-examination, and 'what-if' scenarios. Scrutinize their previous answer heavily if they made a mistake.";
+        difficultyInstructions = "CRITICAL REQUIREMENT - Difficulty: HARD. You MUST ask EXTREMELY DIFFICULT, next-level questions. Ask highly complex architectural questions, extreme edge cases, intense cross-examination, and difficult 'what-if' scenarios. Act like a principal engineer grilling a senior candidate. Scrutinize their previous answer heavily if they made any mistake.";
         break;
       default:
-        difficultyInstructions = "Difficulty: MIXED. Adapt dynamically based on the context.";
+        difficultyInstructions = "CRITICAL REQUIREMENT - Difficulty: MIXED. Adapt dynamically based on the context.";
     }
 
     const prompt = `You are running a live document-based interview. BE HIGHLY CREATIVE. Never ask the same cliché questions.

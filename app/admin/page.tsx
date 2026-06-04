@@ -247,7 +247,12 @@ export default async function AdminDashboard() {
                   </div>
                   
                   {/* Detailed Scores */}
-                  {(session.status === 'completed' || session.session_status === 'completed') && (
+                  {session.processing_status === 'pending' || session.processing_status === 'processing' ? (
+                    <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg text-sm text-amber-700 dark:text-amber-400 flex items-center justify-center gap-2 font-medium">
+                      <Activity className="h-4 w-4 animate-pulse" />
+                      AI is evaluating this interview...
+                    </div>
+                  ) : (session.status === 'completed' || session.session_status === 'completed') && (
                     <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2">
                       <div className="bg-slate-100 dark:bg-slate-900/80 p-2.5 rounded-lg border border-border/50 text-center">
                         <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Overall</div>
