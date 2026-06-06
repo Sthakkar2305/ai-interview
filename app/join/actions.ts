@@ -28,8 +28,8 @@ export async function verifyAndCreateAnonymousCandidate(interviewId: string, tok
       return { error: "Invalid Interview ID or Access Token" }
     }
 
-    if (interviewData.status === 'completed' || interviewData.status === 'terminated') {
-      return { error: "This interview session has already ended." }
+    if (interviewData.status !== 'scheduled') {
+      return { error: "This interview token has already been used by a candidate." }
     }
 
     const now = new Date()
@@ -81,7 +81,8 @@ export async function verifyAndCreateAnonymousCandidate(interviewId: string, tok
         interview_type: interviewData.interview_type,
         manual_qa: interviewData.manual_qa,
         passing_marks: interviewData.passing_marks,
-        question_categories: interviewData.question_categories
+        question_categories: interviewData.question_categories,
+        question_count: interviewData.question_count
       }
     }
   } catch (err: any) {

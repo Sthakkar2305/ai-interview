@@ -70,7 +70,7 @@ ${!isFirstQuestion ? "- The previous question and the candidate's spoken answer"
 
 Rules:
 - ${difficultyInstructions}
-- Do not repeat any previously asked question.
+- ABSOLUTE CRITICAL RULE: DO NOT repeat any previously asked question. Do NOT ask about the exact same concept or tool that was already discussed. Choose a DIFFERENT topic from the list.
 - Make it sound like a natural spoken question from a human interviewer.
 - Return only valid JSON.
 
@@ -100,6 +100,8 @@ JSON schema:
       messages: [{ role: "user", content: prompt }],
       temperature: 0.9,
       top_p: 0.95,
+      frequency_penalty: 0.5,
+      presence_penalty: 0.5,
       max_tokens: 1500,
       chat_template_kwargs: { thinking: true },
       stream: true,

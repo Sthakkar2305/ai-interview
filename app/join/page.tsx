@@ -99,7 +99,7 @@ export default function JoinInterviewPage() {
         `interview_config_${sessionData.id}`,
         JSON.stringify({
           duration: interviewData.duration_minutes || 30,
-          questionCount: Array.isArray(interviewData.manual_qa) ? interviewData.manual_qa.length : 5,
+          questionCount: interviewData.question_count || (Array.isArray(interviewData.manual_qa) && interviewData.manual_qa.length > 0 ? interviewData.manual_qa.length : 5),
           difficulty: interviewData.difficulty || "medium",
           mode: interviewData.interview_type,
           manualQa: interviewData.manual_qa || [],

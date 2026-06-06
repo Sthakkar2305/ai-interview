@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const supabase = getSupabaseClient()
 
   const [sessions, setSessions] = useState<DashboardSession[]>([])
+  const [scheduledInterviews, setScheduledInterviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalInterviews: 0,
@@ -111,6 +112,41 @@ export default function DashboardPage() {
             failedCount,
             passPercentage: completedSessions.length ? Math.round((passedCount / completedSessions.length) * 100) : 0
           })
+        }
+
+        // Fetch Scheduled Interviews created by this user
+        const { data: scheduledData, error: scheduledError } = await supabase
+          .from("scheduled_interviews")
+          .select(`
+            id,
+            title,
+            role,
+            status,
+            scheduled_at,
+            access_token,
+            candidate_id,
+            profiles ( full_name )
+          `)
+          .eq("recruiter_id", user.id)
+          .order("created_at", { ascending: false })
+
+        if (!scheduledError && scheduledData) {
+          const candidateIds = scheduledData.map(s => s.candidate_id).filter(Boolean)
+          
+          if (candidateIds.length > 0) {
+            const { data: candidateSessions } = await supabase
+              .from("interview_sessions")
+              .select("user_id, overall_score, processing_status, status")
+              .in("user_id", candidateIds)
+              
+            const enrichedData = scheduledData.map(schedule => {
+              const session = candidateSessions?.find(s => s.user_id === schedule.candidate_id)
+              return { ...schedule, session }
+            })
+            setScheduledInterviews(enrichedData)
+          } else {
+            setScheduledInterviews(scheduledData)
+          }
         }
       } catch (err) {
         console.error("Error fetching dashboard:", err)
@@ -230,6 +266,87 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Scheduled Candidates */}
+        {scheduledInterviews.length > 0 && (
+          <div className="space-y-4 mb-8">
+            <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Scheduled Candidates
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {scheduledInterviews.map((schedule) => (
+                <Card key={schedule.id} className="flex flex-col border-primary/20 bg-primary/5">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                        schedule.status === 'completed' 
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                          : schedule.status === 'active'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      }`}>
+                        {schedule.status}
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {new Date(schedule.scheduled_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <CardTitle className="text-lg line-clamp-1">
+                      {schedule.profiles?.full_name || "Waiting for candidate"}
+                    </CardTitle>
+                    <CardDescription className="line-clamp-1">
+                      {schedule.title} - {schedule.role}
+                    </CardDescription>
+                  </CardHeader>
+                  
+                  <CardContent className="flex-1">
+                    {schedule.session ? (
+                      schedule.session.processing_status === 'pending' || schedule.session.processing_status === 'processing' ? (
+                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-medium">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Evaluating AI...
+                        </div>
+                      ) : schedule.session.status === 'completed' ? (
+                        <div className="flex items-end gap-2">
+                          <span className="text-3xl font-bold text-primary">{schedule.session.overall_score || 0}</span>
+                          <span className="text-sm text-muted-foreground mb-1">/ 100 Score</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-yellow-600 text-sm font-medium">
+                          <AlertCircle className="h-4 w-4" />
+                          Candidate Interviewing
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium">
+                        <Clock className="h-4 w-4" />
+                        Not Started Yet
+                      </div>
+                    )}
+                  </CardContent>
+                  
+                  <div className="p-6 pt-0 mt-auto">
+                    <Button 
+                      className="w-full" 
+                      variant="outline"
+                      onClick={() => {
+                        if (schedule.session?.status === 'completed') {
+                           router.push(`/admin`) // Route to admin or results to view their score
+                        } else {
+                           navigator.clipboard.writeText(schedule.access_token)
+                           alert("Access Token copied to clipboard: " + schedule.access_token)
+                        }
+                      }}
+                    >
+                      {schedule.session?.status === 'completed' ? 'View Results in Admin' : 'Copy Token'}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Activity List */}
         <div className="space-y-4">

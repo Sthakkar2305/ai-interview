@@ -135,6 +135,7 @@ export default function ScheduleInterviewPage() {
           document_name: documentName,
           manual_qa: manualQa,
           passing_marks: passingMarks,
+          question_count: config.questionCount,
         }])
         .select()
         .single()
@@ -265,6 +266,21 @@ export default function ScheduleInterviewPage() {
                   </Button>
                 </div>
                 
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base">Number of Questions</Label>
+                    <span className="text-sm font-semibold text-primary">{config.questionCount}</span>
+                  </div>
+                  <Input 
+                    type="number" 
+                    min={1} 
+                    max={50} 
+                    value={config.questionCount}
+                    onChange={(e) => setConfig({ ...config, questionCount: parseInt(e.target.value) || 5 })}
+                    className="max-w-[150px]"
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label>Interview Title</Label>
                   <Input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Senior Frontend Developer Q3" disabled={loading} />
