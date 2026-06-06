@@ -56,7 +56,6 @@ export default function ResultsPage() {
           .from("interview_sessions")
           .select("*, interviews(*)")
           .eq("id", sessionId)
-          .eq("user_id", user.id)
           .single()
 
         if (sessionError) {

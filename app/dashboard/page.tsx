@@ -123,34 +123,55 @@ export default function DashboardPage() {
             role,
             status,
             scheduled_at,
-            access_token,
-            candidate_id
+            access_token
           `)
           .eq("recruiter_id", user.id)
           .order("created_at", { ascending: false })
 
         if (!scheduledError && scheduledData) {
-          const candidateIds = scheduledData.map(s => s.candidate_id).filter(Boolean)
-          
-          if (candidateIds.length > 0) {
-            // Fetch Sessions
-            const { data: candidateSessions } = await supabase
-              .from("interview_sessions")
-              .select("user_id, overall_score, processing_status, status")
-              .in("user_id", candidateIds)
+          if (scheduledData.length > 0) {
+            // Find the linked candidate interviews by matching title and description
+            const titles = scheduledData.map(s => s.title)
+            
+            const { data: candidateInterviews } = await supabase
+              .from("interviews")
+              .select("id, user_id, title, description")
+              .in("title", titles)
               
-            // Fetch Profiles manually since FK might not exist in Supabase schema cache
-            const { data: candidateProfiles } = await supabase
-              .from("profiles")
-              .select("id, full_name")
-              .in("id", candidateIds)
-
             const enrichedData = scheduledData.map(schedule => {
-              const session = candidateSessions?.find(s => s.user_id === schedule.candidate_id)
-              const profile = candidateProfiles?.find(p => p.id === schedule.candidate_id)
-              return { ...schedule, session, profiles: profile }
+              // Find matching interview
+              const matchedInterview = candidateInterviews?.find(i => 
+                i.title === schedule.title && 
+                i.description === `Role: ${schedule.role}`
+              )
+              
+              return { ...schedule, matched_interview: matchedInterview }
             })
-            setScheduledInterviews(enrichedData)
+            
+            // Now fetch sessions and profiles for the matched candidates
+            const candidateIds = enrichedData.map(s => s.matched_interview?.user_id).filter(Boolean)
+            
+            if (candidateIds.length > 0) {
+              const { data: candidateSessions } = await supabase
+                .from("interview_sessions")
+                .select("user_id, overall_score, processing_status, status")
+                .in("user_id", candidateIds)
+                
+              const { data: candidateProfiles } = await supabase
+                .from("profiles")
+                .select("id, full_name")
+                .in("id", candidateIds)
+
+              const finalData = enrichedData.map(schedule => {
+                const candidateId = schedule.matched_interview?.user_id
+                const session = candidateSessions?.find(s => s.user_id === candidateId)
+                const profile = candidateProfiles?.find(p => p.id === candidateId)
+                return { ...schedule, session, profiles: profile }
+              })
+              setScheduledInterviews(finalData)
+            } else {
+              setScheduledInterviews(enrichedData)
+            }
           } else {
             setScheduledInterviews(scheduledData)
           }
@@ -339,14 +360,14 @@ export default function DashboardPage() {
                       variant="outline"
                       onClick={() => {
                         if (schedule.session?.status === 'completed') {
-                           router.push(`/admin`) // Route to admin or results to view their score
+                           router.push(`/interview/${schedule.matched_interview?.id}/session/${schedule.session?.id}/results`)
                         } else {
                            navigator.clipboard.writeText(schedule.access_token)
                            alert("Access Token copied to clipboard: " + schedule.access_token)
                         }
                       }}
                     >
-                      {schedule.session?.status === 'completed' ? 'View Results in Admin' : 'Copy Token'}
+                      {schedule.session?.status === 'completed' ? 'View Results' : 'Copy Token'}
                     </Button>
                   </div>
                 </Card>
