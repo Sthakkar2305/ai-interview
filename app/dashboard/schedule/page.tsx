@@ -28,6 +28,7 @@ export default function ScheduleInterviewPage() {
   const [difficulty, setDifficulty] = useState("medium")
   const [duration, setDuration] = useState(30)
   const [passingMarks, setPassingMarks] = useState(70)
+  const [questionCount, setQuestionCount] = useState(5)
   const [scheduledAt, setScheduledAt] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -135,7 +136,7 @@ export default function ScheduleInterviewPage() {
           document_name: documentName,
           manual_qa: manualQa,
           passing_marks: passingMarks,
-          question_count: config.questionCount,
+          question_count: questionCount,
         }])
         .select()
         .single()
@@ -269,14 +270,14 @@ export default function ScheduleInterviewPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-base">Number of Questions</Label>
-                    <span className="text-sm font-semibold text-primary">{config.questionCount}</span>
+                    <span className="text-sm font-semibold text-primary">{questionCount}</span>
                   </div>
                   <Input 
                     type="number" 
                     min={1} 
                     max={50} 
-                    value={config.questionCount}
-                    onChange={(e) => setConfig({ ...config, questionCount: parseInt(e.target.value) || 5 })}
+                    value={questionCount}
+                    onChange={(e) => setQuestionCount(parseInt(e.target.value) || 5)}
                     className="max-w-[150px]"
                   />
                 </div>
