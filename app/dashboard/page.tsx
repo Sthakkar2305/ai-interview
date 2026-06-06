@@ -16,7 +16,8 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Clock
 } from "lucide-react"
 
 // Types for our data
