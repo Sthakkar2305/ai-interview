@@ -124,8 +124,7 @@ export default function DashboardPage() {
             status,
             scheduled_at,
             access_token,
-            candidate_id,
-            profiles ( full_name )
+            candidate_id
           `)
           .eq("recruiter_id", user.id)
           .order("created_at", { ascending: false })
@@ -134,14 +133,22 @@ export default function DashboardPage() {
           const candidateIds = scheduledData.map(s => s.candidate_id).filter(Boolean)
           
           if (candidateIds.length > 0) {
+            // Fetch Sessions
             const { data: candidateSessions } = await supabase
               .from("interview_sessions")
               .select("user_id, overall_score, processing_status, status")
               .in("user_id", candidateIds)
               
+            // Fetch Profiles manually since FK might not exist in Supabase schema cache
+            const { data: candidateProfiles } = await supabase
+              .from("profiles")
+              .select("id, full_name")
+              .in("id", candidateIds)
+
             const enrichedData = scheduledData.map(schedule => {
               const session = candidateSessions?.find(s => s.user_id === schedule.candidate_id)
-              return { ...schedule, session }
+              const profile = candidateProfiles?.find(p => p.id === schedule.candidate_id)
+              return { ...schedule, session, profiles: profile }
             })
             setScheduledInterviews(enrichedData)
           } else {
