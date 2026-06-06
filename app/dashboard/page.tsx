@@ -155,7 +155,7 @@ export default function DashboardPage() {
             if (candidateIds.length > 0) {
               const { data: candidateSessions } = await supabase
                 .from("interview_sessions")
-                .select("user_id, overall_score, processing_status, status")
+                .select("id, user_id, overall_score, processing_status, status")
                 .in("user_id", candidateIds)
                 
               const { data: candidateProfiles } = await supabase
