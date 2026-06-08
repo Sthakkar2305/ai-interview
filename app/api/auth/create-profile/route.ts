@@ -39,14 +39,14 @@ export async function POST(request: Request) {
           port: 465,
           secure: true,
           auth: {
-            user: "no.reply.ai.interviews@gmail.com",
+            user: "techgaravi1@gmail.com",
             pass: process.env.SMTP_PASSWORD || "INSERT_APP_PASSWORD_HERE",
           },
         })
 
         await transporter.sendMail({
-          from: '"AI Interview System" <no.reply.ai.interviews@gmail.com>',
-          to: "no.reply.ai.interviews@gmail.com", // Sent to admin
+          from: '"AI Interview Platform" <techgaravi1@gmail.com>',
+          to: "techgaravi1@gmail.com", // Sent to admin
           subject: `Action Required: New Company Registration (${fullName})`,
           html: `
             <h2>New Company Registration Requires Approval</h2>

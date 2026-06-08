@@ -680,6 +680,20 @@ export default function InterviewSessionPage() {
                 <div>{error}</div>
               </div>
             )}
+            
+            <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg text-sm space-y-3 mb-4">
+              <p className="font-bold flex items-center gap-2 text-primary">
+                <ShieldAlert className="w-4 h-4" /> Important Interview Rules
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-1.5 font-medium ml-1">
+                <li><strong className="text-foreground">Do not close or switch tabs.</strong> Doing so will terminate the session.</li>
+                <li>Find a <strong className="text-foreground">silent place</strong> with no background noise or voices.</li>
+                <li>Ensure <strong className="text-foreground">proper camera lighting</strong> and positioning.</li>
+                <li>Ensure <strong className="text-foreground">only your face is visible</strong> (no multiple faces).</li>
+                <li><strong className="text-foreground">Do not break eye contact.</strong> You will receive 2 warnings before termination.</li>
+              </ul>
+            </div>
+
             <div className="aspect-video bg-black rounded relative overflow-hidden">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
             </div>
@@ -719,7 +733,8 @@ export default function InterviewSessionPage() {
       <ProctoringEngine 
         sessionId={sessionId} 
         isActive={sessionStarted && !isTerminated} 
-        onTerminate={() => setIsTerminated(true)} 
+        onTerminate={() => setIsTerminated(true)}
+        videoRef={videoRef}
       />
       <header className="p-4 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card">
         <div>

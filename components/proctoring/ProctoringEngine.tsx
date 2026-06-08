@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, RefObject } from "react"
 import { getSupabaseClient } from "@/lib/supabase-client"
 import * as tf from "@tensorflow/tfjs"
 import { AlertCircle, ShieldAlert, MonitorOff } from "lucide-react"
@@ -11,15 +11,16 @@ export interface ProctoringEngineProps {
   sessionId: string
   isActive: boolean
   onTerminate: () => void
+  videoRef: RefObject<HTMLVideoElement | null>
 }
 
-export function ProctoringEngine({ sessionId, isActive, onTerminate }: ProctoringEngineProps) {
+export function ProctoringEngine({ sessionId, isActive, onTerminate, videoRef }: ProctoringEngineProps) {
   const supabase = getSupabaseClient()
-  const videoRef = useRef<HTMLVideoElement>(null)
   
   const [detector, setDetector] = useState<any>(null)
   const [warningMessage, setWarningMessage] = useState("")
   const [violationCount, setViolationCount] = useState(0)
+  const [debugFaceCount, setDebugFaceCount] = useState<number | null>(null)
   
   const faceMissingStrikesRef = useRef(0)
   const faceMissingStartRef = useRef<number | null>(null)
@@ -29,71 +30,60 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
   // Initialize TF.js and Face Detection model
   useEffect(() => {
     async function initDetector() {
-      await tf.ready()
-      
-      // Attach tf to window so the CDN script can find it
-      ;(window as any).tf = tf
-
-      // Load face-detection script dynamically to avoid Turbopack bundling issues
-      if (!(window as any).faceDetection) {
-        const script = document.createElement("script")
-        script.src = "https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection"
-        script.async = true
-        document.body.appendChild(script)
+      try {
+        console.log("Initializing TF.js...")
+        await tf.ready()
         
-        await new Promise((resolve, reject) => {
-          script.onload = resolve
-          script.onerror = () => reject(new Error("Failed to load face detection model"))
-        })
-      }
+        // Attach tf to window so the CDN script can find it
+        ;(window as any).tf = tf
 
-      const faceDetection = (window as any).faceDetection
-      const model = faceDetection.SupportedModels.MediaPipeFaceDetector
-      const detectorConfig = {
-        runtime: "tfjs",
-        maxFaces: 2,
+        // Load face-detection script dynamically to avoid Turbopack bundling issues
+        if (!(window as any).faceDetection) {
+          console.log("Loading face detection script...")
+          const script = document.createElement("script")
+          script.src = "https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection"
+          script.async = true
+          document.body.appendChild(script)
+          
+          await new Promise((resolve, reject) => {
+            script.onload = resolve
+            script.onerror = () => reject(new Error("Failed to load face detection model"))
+          })
+        }
+
+        console.log("Creating detector...")
+        const faceDetection = (window as any).faceDetection
+        const model = faceDetection.SupportedModels.MediaPipeFaceDetector
+        const detectorConfig = {
+          runtime: "tfjs",
+          maxFaces: 5,
+        }
+        const newDetector = await faceDetection.createDetector(model, detectorConfig)
+        console.log("Detector created successfully:", newDetector)
+        setDetector(newDetector)
+      } catch (err) {
+        console.error("Failed to initialize Face Detection:", err)
       }
-      const newDetector = await faceDetection.createDetector(model, detectorConfig)
-      setDetector(newDetector)
     }
     initDetector()
   }, [])
 
-  // Start webcam
+  // Start webcam: Removed internal camera request. We now rely on the parent videoElement.
   useEffect(() => {
-    if (!isActive) return
-    
-    async function setupCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-      } catch (err) {
-        logViolation("camera_disabled", "Candidate denied or disabled camera access", "high")
-        triggerWarning("Camera access is required for proctoring.")
-      }
-    }
-    setupCamera()
-
-    return () => {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream
-        stream.getTracks().forEach(track => track.stop())
-      }
-    }
+    // We just wait for the parent to provide the video feed
   }, [isActive])
 
   // Capture screenshot and upload to Supabase storage
   const uploadEvidence = async (fileName: string): Promise<string | null> => {
-    if (!videoRef.current) return null
+    if (!videoRef?.current) return null
     try {
+      const videoElement = videoRef.current
       const canvas = document.createElement("canvas")
-      canvas.width = videoRef.current.videoWidth
-      canvas.height = videoRef.current.videoHeight
+      canvas.width = videoElement.videoWidth || 320
+      canvas.height = videoElement.videoHeight || 240
       const ctx = canvas.getContext("2d")
       if (!ctx) return null
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
       
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7))
       if (!blob) return null
@@ -166,30 +156,35 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
 
   // Proctoring checks: Face detection loop
   useEffect(() => {
-    if (!isActive || !detector || !videoRef.current || isTerminatedRef.current) return
+    if (!isActive || !detector || !videoRef?.current || isTerminatedRef.current) return
 
-    const video = videoRef.current
     let animationFrameId: number
 
     const detectFaces = async () => {
-      if (video.readyState === 4 && !isCheckingRef.current && !isTerminatedRef.current) {
+      const videoElement = videoRef?.current
+      if (videoElement && videoElement.readyState === 4 && !isCheckingRef.current && !isTerminatedRef.current) {
         isCheckingRef.current = true
         try {
-          const faces = await detector.estimateFaces(video)
+          const faces = await detector.estimateFaces(videoElement)
           const now = Date.now()
+          
+          // Throttled UI update for debugging
+          if (now % 10 === 0) setDebugFaceCount(faces.length)
 
           if (faces.length === 0) {
-            // Face missing logic (1.5 second grace period to reduce false positives)
+            // Face missing logic (0.8 second grace period to reduce false positives)
             if (!faceMissingStartRef.current) {
               faceMissingStartRef.current = now
-            } else if (now - faceMissingStartRef.current > 1500) {
+            } else if (now - faceMissingStartRef.current > 800) {
               faceMissingStrikesRef.current += 1
-              if (faceMissingStrikesRef.current >= 2) {
+              if (faceMissingStrikesRef.current >= 3) {
                 handleTermination("Face not detected in camera frame repeatedly.", "eye_contact_lost")
               } else {
+                const strikeCount = faceMissingStrikesRef.current
                 const screenshot = await uploadEvidence("face_missing_warning")
-                logViolation("face_missing_warning", "Face missing or looking away (Strike 1)", "high", screenshot)
-                setWarningMessage("Please look directly at the screen. One more warning will terminate the interview.")
+                logViolation("face_missing_warning", `Face missing or looking away (Strike ${strikeCount})`, "high", screenshot)
+                const warningsLeft = 3 - strikeCount
+                setWarningMessage(`Please look directly at the screen. ${warningsLeft} more warning${warningsLeft === 1 ? '' : 's'} will terminate the interview.`)
                 setTimeout(() => setWarningMessage(""), 5000)
               }
               faceMissingStartRef.current = null // reset timer
@@ -211,13 +206,13 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
       animationFrameId = requestAnimationFrame(detectFaces)
     }
 
-    video.addEventListener('loadeddata', detectFaces)
+    // Start detection
+    detectFaces()
     
     return () => {
-      video.removeEventListener('loadeddata', detectFaces)
       cancelAnimationFrame(animationFrameId)
     }
-  }, [isActive, detector])
+  }, [isActive, detector, videoRef])
 
   const triggerWarning = (msg: string) => {
     setWarningMessage(msg)
@@ -246,8 +241,11 @@ export function ProctoringEngine({ sessionId, isActive, onTerminate }: Proctorin
 
   return (
     <>
-      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
-      
+      {/* Face Detection Debug Overlay */}
+      <div className="fixed bottom-4 left-4 z-[100] bg-black/80 text-white text-xs px-3 py-1.5 rounded-full font-mono shadow-lg border border-white/20">
+        AI Scanner: {debugFaceCount !== null ? `${debugFaceCount} Face(s) Detected` : 'Initializing...'}
+      </div>
+
       {/* Hidden button to enforce fullscreen if needed, typically you'd bind this to the 'Start' button but we can put a small banner */}
       {!document.fullscreenElement && (
         <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-sm py-2 px-4 flex justify-between items-center z-50">

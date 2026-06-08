@@ -82,8 +82,14 @@ export default function SignupPage() {
         }
       }
 
-      // Check if Supabase requires email verification (identities might be empty if unverified)
-      if (signupData?.user?.identities?.length === 0 || !signupData.session) {
+      // Check if Supabase requires email verification (identities might be empty if unverified or already registered)
+      if (signupData?.user?.identities?.length === 0) {
+        setError("This email is already used. Try a different professional email address.")
+        setLoading(false)
+        return
+      }
+
+      if (!signupData.session) {
         if (role === 'company') {
           setCompanyPending(true)
         } else {
@@ -130,10 +136,10 @@ export default function SignupPage() {
           ) : emailSent ? (
             <div className="space-y-6">
               <div className="bg-primary/10 text-primary p-4 rounded-lg text-sm font-medium flex items-start gap-3">
-                <span>
-                  Please check your inbox at <strong>{email}</strong> for an email from <strong>no.reply.ai.interviews@gmail.com</strong>.
+                <p className="text-sm leading-relaxed">
+                  Please check your inbox at <strong>{email}</strong> for an email from <strong>techgaravi1@gmail.com</strong>.
                   Click the secure link to verify your identity. The link expires in 5 minutes.
-                </span>
+                </p>
               </div>
               <Button className="w-full" onClick={() => router.push("/auth/login")} variant="outline">
                 Return to Login
