@@ -31,16 +31,15 @@ export default function ForgotPasswordPage() {
         return
       }
 
-      const response = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      })
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: `${window.location.origin}/auth/update-password`,
+        }
+      )
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error || "Failed to send reset email. Please try again.")
+      if (resetError) {
+        setError(resetError.message || "Failed to send reset email. Please try again.")
       } else {
         setSuccess(true)
       }

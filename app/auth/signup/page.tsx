@@ -46,6 +46,23 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
+      // Pre-check if the email is already registered to bypass Supabase's Email Enumeration Protection
+      try {
+        const checkRes = await fetch("/api/auth/check-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        })
+        const checkData = await checkRes.json()
+        if (checkData.exists) {
+          setError("User already registered. Please use a different email or sign in.")
+          setLoading(false)
+          return
+        }
+      } catch (checkErr) {
+        console.error("Failed to check email:", checkErr)
+      }
+
       const { data: signupData, error: signupError } = await supabase.auth.signUp({
         email,
         password,
