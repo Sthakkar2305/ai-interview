@@ -117,3 +117,9 @@ ALTER TABLE public.violation_logs ADD COLUMN IF NOT EXISTS audio_metadata JSONB;
 
 -- 7. Create Storage Bucket for Proctoring Evidence
 INSERT INTO storage.buckets (id, name, public) VALUES ('proctoring-evidence', 'proctoring-evidence', true) ON CONFLICT DO NOTHING;
+
+-- 8. Add recording URL to interview_sessions
+ALTER TABLE public.interview_sessions ADD COLUMN IF NOT EXISTS recording_url TEXT;
+
+-- 9. Create Storage Bucket for Interview Recordings
+INSERT INTO storage.buckets (id, name, public) VALUES ('interview-recordings', 'interview-recordings', true) ON CONFLICT DO NOTHING;

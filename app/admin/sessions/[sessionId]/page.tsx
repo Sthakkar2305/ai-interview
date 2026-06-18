@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowLeft, User, Calendar, Activity, CheckCircle2, AlertCircle, FileText, Mic, Award, ShieldAlert } from "lucide-react"
+import { ArrowLeft, User, Calendar, Activity, CheckCircle2, AlertCircle, FileText, Mic, Award, ShieldAlert, Video } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +130,27 @@ export default async function AdminSessionDetails({ params }: { params: Promise<
             This interview was forcefully terminated by the Proctoring Engine. Reason: {session.failure_reason}
           </p>
         </div>
+      )}
+
+      {/* Session Recording Player */}
+      {session.recording_url && (
+        <Card className="shadow-lg border-primary/20 overflow-hidden">
+          <CardHeader className="bg-primary/5 pb-4 border-b">
+            <CardTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5 text-primary" />
+              Full Interview Recording
+            </CardTitle>
+            <CardDescription>Watch the complete video and audio recording of this candidate's session</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 bg-black">
+            <video 
+              controls 
+              src={session.recording_url} 
+              className="w-full max-h-[600px] object-contain" 
+              preload="metadata"
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* Deep Feedback Analysis */}

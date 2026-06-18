@@ -85,7 +85,9 @@ export default function InterviewSessionPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const fullSessionRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const fullSessionChunksRef = useRef<Blob[]>([])
   const askedQuestionsRef = useRef<string[]>([])
   const currentQuestionRef = useRef("")
 
@@ -107,6 +109,7 @@ export default function InterviewSessionPage() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true)
   const [canSubmitAnswer, setCanSubmitAnswer] = useState(false)
   const [canSubmitCountdown, setCanSubmitCountdown] = useState(10)
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false)
 
   useEffect(() => {
     if (isAnswering) {
@@ -354,6 +357,19 @@ export default function InterviewSessionPage() {
     setSessionStarted(true)
     askedQuestionsRef.current = []
     
+    // Start full session recording
+    fullSessionChunksRef.current = []
+    try {
+      const recorder = new MediaRecorder(stream)
+      fullSessionRecorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) fullSessionChunksRef.current.push(event.data)
+      }
+      recorder.start(1000)
+    } catch (recorderError) {
+      console.error("Full session recorder fail:", recorderError)
+    }
+
     // Pre-warm the SpeechSynthesis to unlock it for future API responses
     speakText("Starting your interview now. Good luck!")
     
@@ -550,10 +566,46 @@ export default function InterviewSessionPage() {
 
   const finishInterview = async () => {
     setIsProcessing(true)
-    setCurrentQuestion("Generating your results...")
+    setIsUploadingVideo(true)
+    setCurrentQuestion("Generating your results and uploading recording...")
     speakText("Interview complete. Give me a moment to analyze your session and generate your results.")
 
     try {
+      // Stop and upload full session recording
+      if (fullSessionRecorderRef.current && fullSessionRecorderRef.current.state !== "inactive") {
+        await new Promise<void>((resolve) => {
+          if (!fullSessionRecorderRef.current) return resolve();
+          fullSessionRecorderRef.current.onstop = async () => {
+            const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
+            const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
+            const fileName = `${sessionId}-${Date.now()}.webm`
+            
+            try {
+              const { data, error } = await supabase.storage
+                .from("interview-recordings")
+                .upload(fileName, videoBlob, { contentType: mimeType })
+              
+              if (!error && data) {
+                const { data: publicUrlData } = supabase.storage
+                  .from("interview-recordings")
+                  .getPublicUrl(fileName)
+                
+                if (publicUrlData.publicUrl) {
+                  await supabase
+                    .from("interview_sessions")
+                    .update({ recording_url: publicUrlData.publicUrl })
+                    .eq("id", sessionId)
+                }
+              }
+            } catch (err) {
+              console.error("Video upload failed", err)
+            }
+            resolve()
+          }
+          fullSessionRecorderRef.current.stop()
+        })
+      }
+
       await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -569,6 +621,8 @@ export default function InterviewSessionPage() {
     } catch (finishError) {
       console.error("Finish error", finishError)
       router.push(`/dashboard`)
+    } finally {
+      setIsUploadingVideo(false)
     }
   }
 
@@ -769,7 +823,7 @@ export default function InterviewSessionPage() {
             {isProcessing && (
               <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 flex-col gap-2">
                 <Loader2 className="h-10 w-10 animate-spin text-white" />
-                <span className="text-white">Processing...</span>
+                <span className="text-white">{isUploadingVideo ? "Uploading Recording..." : "Processing..."}</span>
               </div>
             )}
           </div>
