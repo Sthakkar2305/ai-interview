@@ -357,17 +357,25 @@ export default function InterviewSessionPage() {
     setSessionStarted(true)
     askedQuestionsRef.current = []
     
-    // Start full session recording
-    fullSessionChunksRef.current = []
-    try {
-      const recorder = new MediaRecorder(stream)
-      fullSessionRecorderRef.current = recorder
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) fullSessionChunksRef.current.push(event.data)
+    const stream = (videoRef.current as any).srcObject as MediaStream
+    if (stream && !fullSessionRecorderRef.current) {
+      try {
+        let options: MediaRecorderOptions = {}
+        if (MediaRecorder.isTypeSupported("video/webm")) {
+          options = { mimeType: "video/webm" }
+        } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+          options = { mimeType: "video/mp4" }
+        }
+        
+        const recorder = new MediaRecorder(stream, options)
+        fullSessionRecorderRef.current = recorder
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) fullSessionChunksRef.current.push(event.data)
+        }
+        recorder.start(1000) // Collect 1 second chunks
+      } catch (err) {
+        console.error("Failed to start full session recording", err)
       }
-      recorder.start(1000)
-    } catch (recorderError) {
-      console.error("Full session recorder fail:", recorderError)
     }
 
     // Pre-warm the SpeechSynthesis to unlock it for future API responses
@@ -565,40 +573,44 @@ export default function InterviewSessionPage() {
   }
 
   const uploadVideoRecording = async () => {
-    const doUpload = async () => {
-      if (fullSessionChunksRef.current.length === 0) return;
-      const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
-      const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
-      const fileName = `${sessionId}-${Date.now()}.webm`
-      
-      try {
-        const { data, error } = await supabase.storage
+    return new Promise<void>((resolve) => {
+      if (!fullSessionRecorderRef.current || fullSessionRecorderRef.current.state === "inactive") {
+        return resolve()
+      }
+
+      fullSessionRecorderRef.current.onstop = () => {
+        if (fullSessionChunksRef.current.length === 0) return resolve()
+        
+        const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
+        const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
+        const fileName = `${sessionId}-${Date.now()}.webm`
+        
+        // Fire and forget the upload so we don't block the UI
+        supabase.storage
           .from("interview-recordings")
           .upload(fileName, videoBlob, { contentType: mimeType })
-        
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage
-            .from("interview-recordings")
-            .getPublicUrl(fileName)
+          .then(({ data, error }) => {
+            if (!error && data) {
+              const { data: publicUrlData } = supabase.storage
+                .from("interview-recordings")
+                .getPublicUrl(fileName)
+              
+              if (publicUrlData.publicUrl) {
+                supabase
+                  .from("interview_sessions")
+                  .update({ recording_url: publicUrlData.publicUrl })
+                  .eq("id", sessionId)
+                  .then()
+              }
+            }
+          })
+          .catch(console.error)
           
-          if (publicUrlData.publicUrl) {
-            await supabase
-              .from("interview_sessions")
-              .update({ recording_url: publicUrlData.publicUrl })
-              .eq("id", sessionId)
-          }
-        }
-      } catch (err) {
-        console.error("Video upload failed", err)
+        resolve()
       }
-    }
-
-    if (fullSessionRecorderRef.current && fullSessionRecorderRef.current.state !== "inactive") {
-      fullSessionRecorderRef.current.onstop = doUpload
+      
       fullSessionRecorderRef.current.stop()
-    } else {
-      doUpload()
-    }
+    })
   }
 
   const finishInterview = async () => {
@@ -607,8 +619,8 @@ export default function InterviewSessionPage() {
     speakText("Interview complete. All the best for your results!")
 
     try {
-      // 1. Stop and upload full session recording in the background
-      uploadVideoRecording()
+      // 1. Flush recorder and initiate background upload
+      await uploadVideoRecording()
       // 2. Trigger evaluate in background
       fetch("/api/evaluate", {
         method: "POST",
