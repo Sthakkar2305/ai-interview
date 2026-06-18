@@ -564,6 +564,43 @@ export default function InterviewSessionPage() {
     }
   }
 
+  const uploadVideoRecording = async () => {
+    const doUpload = async () => {
+      if (fullSessionChunksRef.current.length === 0) return;
+      const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
+      const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
+      const fileName = `${sessionId}-${Date.now()}.webm`
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from("interview-recordings")
+          .upload(fileName, videoBlob, { contentType: mimeType })
+        
+        if (!error && data) {
+          const { data: publicUrlData } = supabase.storage
+            .from("interview-recordings")
+            .getPublicUrl(fileName)
+          
+          if (publicUrlData.publicUrl) {
+            await supabase
+              .from("interview_sessions")
+              .update({ recording_url: publicUrlData.publicUrl })
+              .eq("id", sessionId)
+          }
+        }
+      } catch (err) {
+        console.error("Video upload failed", err)
+      }
+    }
+
+    if (fullSessionRecorderRef.current && fullSessionRecorderRef.current.state !== "inactive") {
+      fullSessionRecorderRef.current.onstop = doUpload
+      fullSessionRecorderRef.current.stop()
+    } else {
+      doUpload()
+    }
+  }
+
   const finishInterview = async () => {
     setIsProcessing(true)
     setCurrentQuestion("Saving session...")
@@ -571,36 +608,7 @@ export default function InterviewSessionPage() {
 
     try {
       // 1. Stop and upload full session recording in the background
-      if (fullSessionRecorderRef.current && fullSessionRecorderRef.current.state !== "inactive") {
-        fullSessionRecorderRef.current.onstop = async () => {
-          const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
-          const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
-          const fileName = `${sessionId}-${Date.now()}.webm`
-          
-          try {
-            const { data, error } = await supabase.storage
-              .from("interview-recordings")
-              .upload(fileName, videoBlob, { contentType: mimeType })
-            
-            if (!error && data) {
-              const { data: publicUrlData } = supabase.storage
-                .from("interview-recordings")
-                .getPublicUrl(fileName)
-              
-              if (publicUrlData.publicUrl) {
-                await supabase
-                  .from("interview_sessions")
-                  .update({ recording_url: publicUrlData.publicUrl })
-                  .eq("id", sessionId)
-              }
-            }
-          } catch (err) {
-            console.error("Video upload failed", err)
-          }
-        }
-        fullSessionRecorderRef.current.stop()
-      }
-
+      uploadVideoRecording()
       // 2. Trigger evaluate in background
       fetch("/api/evaluate", {
         method: "POST",
@@ -783,7 +791,10 @@ export default function InterviewSessionPage() {
       <ProctoringEngine 
         sessionId={sessionId} 
         isActive={sessionStarted && !isTerminated} 
-        onTerminate={() => setIsTerminated(true)}
+        onTerminate={() => {
+          uploadVideoRecording()
+          setIsTerminated(true)
+        }}
         videoRef={videoRef}
       />
       <header className="p-4 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card">
