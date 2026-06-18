@@ -357,7 +357,6 @@ export default function InterviewSessionPage() {
     setSessionStarted(true)
     askedQuestionsRef.current = []
     
-    const stream = (videoRef.current as any).srcObject as MediaStream
     if (stream && !fullSessionRecorderRef.current) {
       try {
         let options: MediaRecorderOptions = {}
