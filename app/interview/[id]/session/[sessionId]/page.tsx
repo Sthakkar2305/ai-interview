@@ -371,7 +371,7 @@ export default function InterviewSessionPage() {
     }
 
     // Pre-warm the SpeechSynthesis to unlock it for future API responses
-    speakText("Starting your interview now. Good luck!")
+    speakText("Starting your interview now. All the best for your interview!")
     
     void generateNextQuestion(0)
   }
@@ -566,63 +566,59 @@ export default function InterviewSessionPage() {
 
   const finishInterview = async () => {
     setIsProcessing(true)
-    setIsUploadingVideo(true)
-    setCurrentQuestion("Generating your results and uploading recording...")
-    speakText("Interview complete. Give me a moment to analyze your session and generate your results.")
+    setCurrentQuestion("Saving session...")
+    speakText("Interview complete. All the best for your results!")
 
     try {
-      // Stop and upload full session recording
+      // 1. Stop and upload full session recording in the background
       if (fullSessionRecorderRef.current && fullSessionRecorderRef.current.state !== "inactive") {
-        await new Promise<void>((resolve) => {
-          if (!fullSessionRecorderRef.current) return resolve();
-          fullSessionRecorderRef.current.onstop = async () => {
-            const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
-            const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
-            const fileName = `${sessionId}-${Date.now()}.webm`
+        fullSessionRecorderRef.current.onstop = async () => {
+          const mimeType = fullSessionRecorderRef.current?.mimeType || "video/webm"
+          const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
+          const fileName = `${sessionId}-${Date.now()}.webm`
+          
+          try {
+            const { data, error } = await supabase.storage
+              .from("interview-recordings")
+              .upload(fileName, videoBlob, { contentType: mimeType })
             
-            try {
-              const { data, error } = await supabase.storage
+            if (!error && data) {
+              const { data: publicUrlData } = supabase.storage
                 .from("interview-recordings")
-                .upload(fileName, videoBlob, { contentType: mimeType })
+                .getPublicUrl(fileName)
               
-              if (!error && data) {
-                const { data: publicUrlData } = supabase.storage
-                  .from("interview-recordings")
-                  .getPublicUrl(fileName)
-                
-                if (publicUrlData.publicUrl) {
-                  await supabase
-                    .from("interview_sessions")
-                    .update({ recording_url: publicUrlData.publicUrl })
-                    .eq("id", sessionId)
-                }
+              if (publicUrlData.publicUrl) {
+                await supabase
+                  .from("interview_sessions")
+                  .update({ recording_url: publicUrlData.publicUrl })
+                  .eq("id", sessionId)
               }
-            } catch (err) {
-              console.error("Video upload failed", err)
             }
-            resolve()
+          } catch (err) {
+            console.error("Video upload failed", err)
           }
-          fullSessionRecorderRef.current.stop()
-        })
+        }
+        fullSessionRecorderRef.current.stop()
       }
 
-      await fetch("/api/evaluate", {
+      // 2. Trigger evaluate in background
+      fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
-      })
+      }).catch(console.error)
 
+      // 3. Update status to completed
       await supabase
         .from("interview_sessions")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", sessionId)
 
+      // 4. Navigate immediately
       router.push(`/dashboard`)
     } catch (finishError) {
       console.error("Finish error", finishError)
       router.push(`/dashboard`)
-    } finally {
-      setIsUploadingVideo(false)
     }
   }
 
