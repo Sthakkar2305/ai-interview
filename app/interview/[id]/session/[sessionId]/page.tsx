@@ -584,11 +584,11 @@ export default function InterviewSessionPage() {
         const videoBlob = new Blob(fullSessionChunksRef.current, { type: mimeType })
         const fileName = `${sessionId}-${Date.now()}.webm`
         
-        // Fire and forget the upload so we don't block the UI
+        // Await the upload so we don't lose the video on termination
         supabase.storage
           .from("interview-recordings")
           .upload(fileName, videoBlob, { contentType: mimeType })
-          .then(({ data, error }) => {
+          .then(({ data, error }: any) => {
             if (!error && data) {
               const { data: publicUrlData } = supabase.storage
                 .from("interview-recordings")
@@ -599,13 +599,19 @@ export default function InterviewSessionPage() {
                   .from("interview_sessions")
                   .update({ recording_url: publicUrlData.publicUrl })
                   .eq("id", sessionId)
-                  .then()
+                  .then(() => resolve())
+                  .catch(() => resolve())
+              } else {
+                resolve()
               }
+            } else {
+              resolve()
             }
           })
-          .catch(console.error)
-          
-        resolve()
+          .catch((err: any) => {
+            console.error(err)
+            resolve()
+          })
       }
       
       fullSessionRecorderRef.current.stop()
@@ -802,8 +808,12 @@ export default function InterviewSessionPage() {
       <ProctoringEngine 
         sessionId={sessionId} 
         isActive={sessionStarted && !isTerminated} 
-        onTerminate={() => {
-          uploadVideoRecording()
+        onTerminate={async () => {
+          setIsUploadingVideo(true)
+          setIsProcessing(true)
+          await uploadVideoRecording()
+          setIsUploadingVideo(false)
+          setIsProcessing(false)
           setIsTerminated(true)
         }}
         videoRef={videoRef}
