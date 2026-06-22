@@ -9,14 +9,30 @@ import "../styles/globals.css";
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
+import type { Viewport } from "next"
+
 export const metadata: Metadata = {
   title: "AI Interview Platform",
   description: "Professional AI-powered video interview platform for assessment and evaluation",
   generator: "v0.app",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon.png",
     apple: "/icon.png",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AI Interview",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
