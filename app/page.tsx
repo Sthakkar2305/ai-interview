@@ -20,10 +20,16 @@ import {
   Briefcase,
   History,
   Settings,
-  Target
+  Target,
+  FileText,
+  ExternalLink
 } from "lucide-react"
 
 import logo from "../public/icon.png"
+
+import { ResumeMakerCard } from "@/components/dashboard/resume-maker-card"
+import { CandidateAtsChecker } from "@/components/dashboard/candidate-ats-checker"
+import { CompanyAiScanner } from "@/components/dashboard/company-ai-scanner"
 
 export default function Home() {
   const router = useRouter()
@@ -273,6 +279,36 @@ export default function Home() {
             </div>
           )}
 
+          {/* Action A2: Pro Resume Maker */}
+          {(!user.user_metadata?.role || user.user_metadata?.role === 'candidate') && (
+            <div 
+              onClick={() => window.open("https://cv-maker-two-livid.vercel.app/", "_blank")} 
+              className="group cursor-pointer bg-white dark:bg-[#111425] border border-border/40 hover:border-violet-500/50 hover:shadow-2xl hover:shadow-violet-600/5 transition-all duration-300 rounded-2xl p-8 flex flex-col relative overflow-hidden md:col-span-2 lg:col-span-1"
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+            
+            <div className="p-4 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-2xl w-fit mb-6 transition-transform group-hover:scale-110">
+              <FileText className="h-7 w-7" />
+            </div>
+
+            <div className="space-y-2 flex-1">
+              <h3 className="text-xl font-bold flex items-center gap-2 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                Pro Resume Maker
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1.5" />
+              </h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Create a stunning, ATS-friendly resume in minutes with our advanced, fully-responsive resume builder.
+              </p>
+            </div>
+            
+            <div className="mt-8">
+              <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md">
+                Build Resume Now
+              </Button>
+            </div>
+            </div>
+          )}
+
           {/* Action B: Recruiter Schedulers */}
           {user.user_metadata?.role === 'company' && (
             <div 
@@ -304,6 +340,19 @@ export default function Home() {
           )}
 
         </div>
+
+        {/* Beta Update Modules */}
+        {(!user.user_metadata?.role || user.user_metadata?.role === 'candidate') && (
+          <div className="w-full">
+            <CandidateAtsChecker />
+          </div>
+        )}
+
+        {user.user_metadata?.role === 'company' && (
+          <div className="w-full">
+            <CompanyAiScanner />
+          </div>
+        )}
 
         {/* Dashboard History Quicklink Section */}
         <div 

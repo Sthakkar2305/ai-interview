@@ -20,6 +20,10 @@ import {
   Clock
 } from "lucide-react"
 
+import { ResumeMakerCard } from "@/components/dashboard/resume-maker-card"
+import { CandidateAtsChecker } from "@/components/dashboard/candidate-ats-checker"
+import { CompanyAiScanner } from "@/components/dashboard/company-ai-scanner"
+
 // Types for our data
 type DashboardSession = {
   id: string
@@ -51,6 +55,7 @@ export default function DashboardPage() {
     failedCount: 0,
     passPercentage: 0
   })
+  const [userRole, setUserRole] = useState<string>("candidate")
 
   // 1. Auth Check & Data Fetching
   useEffect(() => {
@@ -132,16 +137,16 @@ export default function DashboardPage() {
         if (!scheduledError && scheduledData) {
           if (scheduledData.length > 0) {
             // Find the linked candidate interviews by matching title and description
-            const titles = scheduledData.map(s => s.title)
+            const titles = scheduledData.map((s: any) => s.title)
             
             const { data: candidateInterviews } = await supabase
               .from("interviews")
               .select("id, user_id, title, description")
               .in("title", titles)
               
-            const enrichedData = scheduledData.map(schedule => {
+            const enrichedData = scheduledData.map((schedule: any) => {
               // Find matching interview
-              const matchedInterview = candidateInterviews?.find(i => 
+              const matchedInterview = candidateInterviews?.find((i: any) => 
                 i.title === schedule.title && 
                 i.description === `Role: ${schedule.role}`
               )
@@ -150,7 +155,7 @@ export default function DashboardPage() {
             })
             
             // Now fetch sessions and profiles for the matched candidates
-            const candidateIds = enrichedData.map(s => s.matched_interview?.user_id).filter(Boolean)
+            const candidateIds = enrichedData.map((s: any) => s.matched_interview?.user_id).filter(Boolean)
             
             if (candidateIds.length > 0) {
               const { data: candidateSessions } = await supabase
@@ -163,10 +168,10 @@ export default function DashboardPage() {
                 .select("id, full_name")
                 .in("id", candidateIds)
 
-              const finalData = enrichedData.map(schedule => {
+              const finalData = enrichedData.map((schedule: any) => {
                 const candidateId = schedule.matched_interview?.user_id
-                const session = candidateSessions?.find(s => s.user_id === candidateId)
-                const profile = candidateProfiles?.find(p => p.id === candidateId)
+                const session = candidateSessions?.find((s: any) => s.user_id === candidateId)
+                const profile = candidateProfiles?.find((p: any) => p.id === candidateId)
                 return { ...schedule, session, profiles: profile }
               })
               setScheduledInterviews(finalData)
@@ -176,6 +181,12 @@ export default function DashboardPage() {
           } else {
             setScheduledInterviews(scheduledData)
           }
+        }
+
+        // Fetch User Role
+        const { data: profileData } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+        if (profileData) {
+          setUserRole(profileData.role)
         }
       } catch (err) {
         console.error("Error fetching dashboard:", err)
@@ -235,6 +246,20 @@ export default function DashboardPage() {
             <Plus className="mr-2 h-4 w-4" /> Start New Interview
           </Button>
         </div>
+
+        {/* Beta Update Modules */}
+        {userRole === "candidate" && (
+          <div className="grid gap-4 md:grid-cols-2 mb-8">
+            <ResumeMakerCard />
+            <CandidateAtsChecker />
+          </div>
+        )}
+
+        {userRole === "company" && (
+          <div className="mb-8">
+            <CompanyAiScanner />
+          </div>
+        )}
 
         {/* Stats Overview Cards */}
         <div className="grid gap-4 md:grid-cols-3">
